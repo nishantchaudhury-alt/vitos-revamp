@@ -842,7 +842,7 @@ function MCPSection({
                   ))}
                 </dl>
 
-                <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-5 py-3">
+                <div className="flex flex-wrap items-center gap-2 bg-muted/20 px-5 py-3">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Granted scopes
                   </span>
@@ -867,42 +867,53 @@ function MCPSection({
                     {selected.type} · {selected.provider}
                   </span>
                 </div>
+              </div>
 
-                <button
-                  type="button"
-                  aria-expanded={toolsOpen}
-                  onClick={() => setToolsOpen((value) => !value)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition hover:bg-hover"
-                >
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-[13px] font-semibold text-foreground">
-                        Effective tool access
-                      </span>
+              <section
+                aria-labelledby="mcp-tools-list-heading"
+                className="mt-3 overflow-hidden rounded-xl border border-border bg-card"
+              >
+                <div className="flex items-center justify-between gap-3 bg-[linear-gradient(100deg,rgba(253,236,242,0.95)_0%,rgba(255,248,251,0.82)_46%,rgba(255,255,255,0.96)_100%)] px-4 py-3.5">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3
+                        id="mcp-tools-list-heading"
+                        className="truncate text-[13px] font-semibold text-foreground"
+                      >
+                        Tools list
+                      </h3>
                       <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                         {tools.length}
                       </span>
-                    </span>
-                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {readOnlyTools.length} read-only · {writeTools.length} can write
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-expanded={toolsOpen}
+                    aria-controls="mcp-tools-list"
+                    onClick={() => setToolsOpen((value) => !value)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition hover:bg-hover hover:text-foreground"
+                  >
                     {toolsOpen ? "Collapse" : "Expand"}
-                    <ChevronDown className={cn("h-4 w-4 transition", toolsOpen && "rotate-180")} />
-                  </span>
-                </button>
+                    <ChevronDown
+                      className={cn("h-4 w-4 transition", toolsOpen && "rotate-180")}
+                    />
+                  </button>
+                </div>
 
                 {toolsOpen ? (
                   tools.length === 0 ? (
-                    <div className="border-t border-border px-4 py-8 text-center">
+                    <div id="mcp-tools-list" className="border-t border-border px-4 py-8 text-center">
                       <p className="text-xs text-muted-foreground">
                         No tools match this credential's scopes. Update the scopes before connecting
                         the client.
                       </p>
                     </div>
                   ) : (
-                    <ul className="border-t border-border">
+                    <ul id="mcp-tools-list" className="border-t border-border">
                       {tools.map((tool) => (
                         <li
                           key={tool.name}
@@ -946,7 +957,7 @@ function MCPSection({
                     </ul>
                   )
                 ) : null}
-              </div>
+              </section>
             </div>
           </>
         )}
