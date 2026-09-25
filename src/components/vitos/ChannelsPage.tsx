@@ -685,7 +685,6 @@ const SECTIONS: Section[] = [
 export function ChannelsPage() {
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [openId, setOpenId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>(SECTIONS[0].id);
   const [listId, setListId] = useState<string | null>(null);
 
   const toggleConnected = (id: string) => setConnected((s) => ({ ...s, [id]: !s[id] }));
@@ -717,67 +716,46 @@ export function ChannelsPage() {
   }
 
   return (
-    <PageContainer>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Channels</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Set up cloud telephony, SIP and social integrations so agents can engage customers across
-          every channel.
-        </p>
-      </div>
+    <PageContainer className="pb-10">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+        <header className="border-b border-border px-5 py-4 sm:px-6">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">Channels</h1>
+          <p className="mt-1 max-w-5xl text-[13px] leading-relaxed text-muted-foreground sm:text-sm">
+            Set up and manage cloud telephony, social media, web, and email integrations so AI
+            agents can engage with customers seamlessly across channels.
+          </p>
+        </header>
 
-      <div className="rounded-2xl border border-[#e8e6e1] bg-white">
-        <div
-          role="tablist"
-          aria-label="Channel categories"
-          className="flex flex-wrap gap-2 border-b border-[#e8e6e1] px-6 py-4 md:px-8"
-        >
-          {SECTIONS.filter((s) => s.id !== "sip").map((s) => {
-            const isActive = activeTab === s.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => setActiveTab(s.id)}
-                className={cn(
-                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40",
-                  isActive
-                    ? "border-[#B22257] bg-[#B22257] text-white shadow-[0_1px_2px_rgba(178,34,87,0.25)]"
-                    : "border-[#e8e6e1] bg-white text-foreground hover:border-[#B22257]/40 hover:text-[#B22257]",
-                )}
-              >
-                {s.title}
-              </button>
-            );
-          })}
-        </div>
-        {SECTIONS.filter((s) => s.id === activeTab || (activeTab === "call" && s.id === "sip")).map(
-          (section, idx) => (
-            <section
-              key={section.id}
-              className={cn("px-6 py-6 md:px-8 md:py-7", idx > 0 && "border-t border-[#e8e6e1]")}
-            >
-              <header className="mb-5">
-                <h2 className="text-[15px] font-semibold text-foreground">{section.title}</h2>
-                <p className="mt-0.5 text-[13px] text-muted-foreground">{section.subtitle}</p>
+        <div className="space-y-7 px-5 py-5 sm:px-6 sm:py-6">
+          {SECTIONS.filter((section) => section.id !== "email").map((section) => (
+            <section key={section.id} aria-labelledby={`channel-section-${section.id}`}>
+              <header className="mb-3">
+                <h2
+                  id={`channel-section-${section.id}`}
+                  className="text-[15px] font-semibold text-foreground"
+                >
+                  {section.title}
+                </h2>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground sm:text-[13px]">
+                  {section.subtitle}
+                </p>
               </header>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {section.channels.map((c) => (
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {section.channels.map((channel) => (
                   <ChannelCard
-                    key={c.id}
-                    channel={c}
-                    connected={!!connected[c.id]}
-                    open={openId === c.id}
-                    onConfigure={() => toggleOpen(c.id)}
-                    onViewList={() => setListId(c.id)}
+                    key={channel.id}
+                    channel={channel}
+                    connected={!!connected[channel.id]}
+                    open={openId === channel.id}
+                    onConfigure={() => toggleOpen(channel.id)}
+                    onViewList={() => setListId(channel.id)}
                   />
                 ))}
               </div>
             </section>
-          ),
-        )}
+          ))}
+        </div>
       </div>
 
       <ChannelConfigDrawer
@@ -806,16 +784,26 @@ function ChannelCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col rounded-xl border bg-white p-3.5 text-left transition",
+        "group relative flex min-h-[166px] flex-col rounded-xl border bg-card p-4 text-left transition duration-200",
         open
-          ? "border-[#B22257] ring-1 ring-[#B22257]/20"
+          ? "border-[#B22257] ring-1 ring-[#B22257]/15"
           : connected
             ? "border-[#B22257]/40 ring-1 ring-[#B22257]/10"
-            : "border-[#e8e6e1] hover:border-[#B22257]/40 hover:shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+            : "border-border hover:border-[#B22257]/30 hover:shadow-[0_4px_14px_rgba(15,23,42,0.05)]",
       )}
     >
+      <button
+        type="button"
+        onClick={onConfigure}
+        aria-expanded={open}
+        aria-label={`Configure ${channel.name}`}
+        className="absolute right-4 top-4 inline-flex h-8 items-center justify-center rounded-lg border border-border bg-card px-3 text-[12.5px] font-medium text-foreground shadow-sm transition hover:border-[#B22257]/35 hover:bg-[#FDF6F8] hover:text-[#B22257] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
+      >
+        Configure
+      </button>
+
       {channel.logo}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
         <span className="truncate text-[14px] font-semibold text-foreground">{channel.name}</span>
         {connected && (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-emerald-700">
@@ -823,28 +811,17 @@ function ChannelCard({
           </span>
         )}
       </div>
-      <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+      <p className="mt-1 line-clamp-2 max-w-md text-[12.5px] leading-relaxed text-muted-foreground">
         {channel.description}
       </p>
-      <div className="mt-3.5 flex items-center gap-2 pt-3 border-t border-[#f0eeea]">
-        <button
-          type="button"
-          onClick={onConfigure}
-          aria-expanded={open}
-          aria-label={`Configure ${channel.name}`}
-          className="flex-1 rounded-lg bg-[#B22257] px-3 py-1.5 text-[12.5px] font-medium text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40"
-        >
-          Configure
-        </button>
-        <button
-          type="button"
-          onClick={onViewList}
-          aria-label={`View list for ${channel.name}`}
-          className="flex-1 rounded-lg border border-[#e8e6e1] bg-white px-3 py-1.5 text-[12.5px] font-medium text-foreground transition hover:border-[#B22257]/40 hover:text-[#B22257] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40"
-        >
-          View list
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onViewList}
+        aria-label={`View list for ${channel.name}`}
+        className="mt-auto w-fit pt-3 text-[12.5px] font-medium text-[#B22257] transition hover:text-[#8F1944] hover:underline hover:underline-offset-4 focus:outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
+      >
+        View list
+      </button>
     </div>
   );
 }
