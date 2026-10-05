@@ -1315,7 +1315,7 @@ function WebsiteConfigurationView({
                 <thead className="border-b border-border bg-muted/35 text-muted-foreground">
                   <tr>
                     <th className="w-12 px-3 py-2 font-medium">#</th>
-                    <th className="w-56 px-3 py-2 font-medium">Workflow</th>
+                    <th className="w-56 px-3 py-2 font-medium">Website</th>
                     <th className="w-20 px-3 py-2 font-medium">Version</th>
                     <th className="w-24 px-3 py-2 font-medium">Allocation</th>
                     <th className="w-48 px-3 py-2 text-right font-medium">Integration</th>

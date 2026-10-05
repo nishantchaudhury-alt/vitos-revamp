@@ -28,6 +28,7 @@ import {
   GitBranch,
   Globe2,
   History,
+  Info,
   Link2,
   ListTree,
   Lock,
@@ -699,9 +700,20 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
     data: { label: "Trigger", detail: "Trigger", tone: "green", kind: "trigger", compact: true },
   },
   {
+    id: "work-send-message",
+    type: "conversation",
+    position: { x: 220, y: 320 },
+    data: {
+      label: "Send Message",
+      detail: "Hey! Welcome",
+      tone: "blue",
+      kind: "message",
+    },
+  },
+  {
     id: "conversation-ai",
     type: "workAgent",
-    position: { x: 285, y: 210 },
+    position: { x: 500, y: 210 },
     data: {
       label: "Conversation AI",
       subtitle: "Your prompt goes here",
@@ -735,7 +747,7 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
   {
     id: "agent-guild",
     type: "workAgent",
-    position: { x: 760, y: 70 },
+    position: { x: 975, y: 70 },
     data: {
       label: "agent_guild_agent",
       subtitle: "Your prompt goes here",
@@ -754,7 +766,7 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
   {
     id: "nested-workflow",
     type: "workflowPreview",
-    position: { x: 1160, y: 20 },
+    position: { x: 1375, y: 20 },
     data: {
       label: "njunj",
       tone: "blue",
@@ -766,7 +778,7 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
   {
     id: "support-primary",
     type: "workAgent",
-    position: { x: 900, y: 355 },
+    position: { x: 1115, y: 355 },
     data: {
       label: "Technical Support Agent 178998804434",
       subtitle: "Your prompt goes here",
@@ -784,7 +796,7 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
   {
     id: "support-secondary",
     type: "workAgent",
-    position: { x: 950, y: 650 },
+    position: { x: 1165, y: 650 },
     data: {
       label: "Technical Support Agent 1789988639679",
       subtitle: "Your prompt goes here",
@@ -803,8 +815,15 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
 
 const workAgentEdges: Edge[] = [
   {
-    id: "work-trigger-conversation",
+    id: "work-trigger-message",
     source: "work-trigger",
+    target: "work-send-message",
+    type: "default",
+    style: { stroke: "#8F94A5", strokeWidth: 1.5 },
+  },
+  {
+    id: "work-message-conversation",
+    source: "work-send-message",
     target: "conversation-ai",
     type: "default",
     style: { stroke: "#8F94A5", strokeWidth: 1.5 },
@@ -980,6 +999,209 @@ function LeftToolDock() {
   );
 }
 
+function SendMessageConfigPanel({ onClose }: { onClose: () => void }) {
+  const [channel, setChannel] = useState("WhatsApp");
+  const [configuration, setConfiguration] = useState("919380947884");
+  const [receiver, setReceiver] = useState("");
+  const [withSubscription, setWithSubscription] = useState(false);
+  const [messageMode, setMessageMode] = useState<"text" | "voice">("text");
+  const [messageBody, setMessageBody] = useState("Hey! Welcome");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+
+  return (
+    <aside
+      aria-label="Send Message configuration"
+      className="absolute inset-y-0 right-0 z-40 flex w-full max-w-[430px] flex-col border-l border-border bg-card shadow-[-12px_0_32px_rgba(15,23,42,0.12)] sm:w-[430px]"
+    >
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+          <MessageSquare className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <h2 className="flex-1 text-[15px] font-semibold text-foreground">Send Message</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close Send Message configuration"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-hover hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid h-11 shrink-0 grid-cols-3 border-b border-border bg-muted/15 px-3">
+        <button
+          type="button"
+          className="border-b-2 border-blue-500 text-[12px] font-semibold text-blue-600"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Setup
+          </span>
+        </button>
+        <button type="button" className="text-[12px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Code2 className="h-3.5 w-3.5" /> Output
+          </span>
+        </button>
+        <button type="button" className="text-[12px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" /> About
+          </span>
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAFBFF] p-3 [scrollbar-color:#D9DFEB_transparent]">
+        <section className="rounded-xl border border-blue-100 bg-white px-3 py-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="h-5 border-l-2 border-blue-500" aria-hidden="true" />
+            <h3 className="text-[13px] font-semibold text-[#333A50]">Summary</h3>
+          </div>
+          <p className="mt-1.5 pl-3 text-[11px] leading-5 text-muted-foreground">
+            Sends a one-way message and continues the flow.
+          </p>
+        </section>
+
+        <section className="mt-3 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border pb-3">
+            <span className="h-5 border-l-2 border-blue-500" aria-hidden="true" />
+            <h3 className="text-[13px] font-semibold text-[#333A50]">Delivery</h3>
+          </div>
+
+          <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+            Channel
+            <select
+              value={channel}
+              onChange={(event) => {
+                const nextChannel = event.target.value;
+                setChannel(nextChannel);
+                setConfiguration(
+                  nextChannel === "Website" ? "kaptureqa · autoqa.com" : "919380947884",
+                );
+              }}
+              className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-[12px] font-normal text-foreground outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              <option>WhatsApp</option>
+              <option>Website</option>
+              <option>Chat</option>
+              <option>SMS</option>
+            </select>
+          </label>
+
+          <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+            Configuration
+            <select
+              value={configuration}
+              onChange={(event) => setConfiguration(event.target.value)}
+              className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-[12px] font-normal text-foreground outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              {channel === "Website" ? (
+                <>
+                  <option>kaptureqa · autoqa.com</option>
+                  <option>Website qa · www.abc.com</option>
+                  <option>newqa · autoqa.com</option>
+                </>
+              ) : (
+                <>
+                  <option>919380947884</option>
+                  <option>Default WhatsApp configuration</option>
+                </>
+              )}
+            </select>
+          </label>
+          <p className="mt-1 text-[10px] text-muted-foreground">Resolves to {channel}</p>
+
+          {channel !== "Website" && (
+            <>
+              <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+                Receiver
+                <input
+                  value={receiver}
+                  onChange={(event) => setReceiver(event.target.value)}
+                  placeholder="Enter email, phone number, or {{$variable}}"
+                  className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 font-mono text-[11px] font-normal text-foreground outline-none transition placeholder:text-muted-foreground focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-[12px] font-semibold text-[#333A50]">With Subscription</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={withSubscription}
+                  onClick={() => setWithSubscription((value) => !value)}
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition",
+                    withSubscription ? "bg-blue-500" : "bg-slate-200",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
+                      withSubscription ? "translate-x-5" : "translate-x-0.5",
+                    )}
+                  />
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="mt-3 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 border-b border-border pb-3">
+            <span className="h-5 border-l-2 border-blue-500" aria-hidden="true" />
+            <h3 className="text-[13px] font-semibold text-[#333A50]">Message</h3>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 rounded-lg border border-border bg-muted/20 p-1">
+            {(["text", "voice"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setMessageMode(mode)}
+                className={cn(
+                  "h-8 rounded-md text-[11px] font-semibold capitalize transition",
+                  messageMode === mode
+                    ? "border border-blue-200 bg-blue-50 text-blue-600 shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {mode === "voice" ? "Voice Note" : "Text"}
+              </button>
+            ))}
+          </div>
+
+          <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+            Message Body
+            <div className="mt-1.5 overflow-hidden rounded-lg border border-border bg-white focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+              <div className="flex h-9 items-center gap-4 border-b border-border px-3 text-[11px] font-semibold text-foreground">
+                <span className="text-[15px]">B</span>
+                <span className="text-[15px] italic">I</span>
+                <span className="text-[15px] underline">U</span>
+                <span className="font-medium">Normal</span>
+              </div>
+              <textarea
+                value={messageBody}
+                onChange={(event) => setMessageBody(event.target.value)}
+                rows={5}
+                className="w-full resize-none px-3 py-2 text-[12px] font-normal text-foreground outline-none"
+              />
+            </div>
+          </label>
+
+          <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+            Attachment URL
+            <input
+              value={attachmentUrl}
+              onChange={(event) => setAttachmentUrl(event.target.value)}
+              placeholder="https://…/invoice.pdf or {{uploadedFileUrl}}"
+              className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 font-mono text-[11px] font-normal text-foreground outline-none transition placeholder:text-muted-foreground focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+        </section>
+      </div>
+    </aside>
+  );
+}
+
 function BuilderInner({
   agent,
   workspaceName,
@@ -1001,6 +1223,7 @@ function BuilderInner({
   const [saved, setSaved] = useState(false);
   const [running, setRunning] = useState(false);
   const [showDeploymentSettings, setShowDeploymentSettings] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const minimapColor = useCallback((node: Node) => {
     const data = node.data as ConversationNodeData;
@@ -1018,6 +1241,7 @@ function BuilderInner({
   const onNodeClick = useCallback(
     (_: unknown, node: Node) => {
       setNodes((current) => current.map((item) => ({ ...item, selected: item.id === node.id })));
+      setSelectedNodeId(node.id === "work-send-message" ? node.id : null);
     },
     [setNodes],
   );
@@ -1089,15 +1313,17 @@ function BuilderInner({
                 <Save className="h-4 w-4" />
               )}
             </button>
-            <button
-              type="button"
-              aria-label="Deploy agent"
-              title="Deploy"
-              onClick={() => setShowDeploymentSettings(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
-            >
-              <Rocket className="h-4 w-4" />
-            </button>
+            {!isWorkAgent && (
+              <button
+                type="button"
+                aria-label="Deploy agent"
+                title="Deploy"
+                onClick={() => setShowDeploymentSettings(true)}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
+              >
+                <Rocket className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           <ReactFlow
@@ -1107,9 +1333,10 @@ function BuilderInner({
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
-            onPaneClick={() =>
-              setNodes((current) => current.map((node) => ({ ...node, selected: false })))
-            }
+            onPaneClick={() => {
+              setNodes((current) => current.map((node) => ({ ...node, selected: false })));
+              setSelectedNodeId(null);
+            }}
             onInit={(instance) => {
               requestAnimationFrame(async () => {
                 await instance.fitView({
@@ -1146,6 +1373,19 @@ function BuilderInner({
               zoomable
             />
           </ReactFlow>
+
+          {isWorkAgent && selectedNodeId === "work-send-message" && (
+            <SendMessageConfigPanel
+              onClose={() => {
+                setSelectedNodeId(null);
+                setNodes((current) =>
+                  current.map((node) =>
+                    node.id === "work-send-message" ? { ...node, selected: false } : node,
+                  ),
+                );
+              }}
+            />
+          )}
 
           <LeftToolDock />
           <CanvasToolbar />
