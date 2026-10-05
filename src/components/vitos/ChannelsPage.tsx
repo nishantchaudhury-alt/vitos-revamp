@@ -11,6 +11,7 @@ import {
   EyeOff,
   Sparkles,
   Server,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageContainer } from "./PageContainer";
@@ -167,6 +168,12 @@ const WhatsAppLogo = () => (
 const WebsiteLogo = () => (
   <LogoWrap bg="#e0f2fe">
     <Globe className="h-5 w-5 text-[#0aa1ff]" />
+  </LogoWrap>
+);
+
+const ChatLogo = () => (
+  <LogoWrap bg="#FDF3F7">
+    <MessageCircle className="h-5 w-5 text-[#B22257]" />
   </LogoWrap>
 );
 
@@ -622,9 +629,9 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    id: "web",
-    title: "Websites",
-    subtitle: "Embed a live chat agent on your website or web app.",
+    id: "chat",
+    title: "Website & Chat",
+    subtitle: "Create real-time chat experiences across websites and applications.",
     channels: [
       {
         id: "website",
@@ -634,6 +641,17 @@ const SECTIONS: Section[] = [
         fields: [
           { id: "domain", label: "Domain", placeholder: "https://your-site.com" },
           { id: "widgetId", label: "Widget ID", placeholder: "widget_••••" },
+        ],
+      },
+      {
+        id: "chat",
+        name: "Chat",
+        description: "Live chat channel for web and in-app customer conversations.",
+        logo: <ChatLogo />,
+        fields: [
+          { id: "chatName", label: "Chat Name", placeholder: "Customer support chat" },
+          { id: "domain", label: "Allowed Domain", placeholder: "https://your-site.com" },
+          { id: "widgetId", label: "Widget ID", placeholder: "chat_••••" },
         ],
       },
     ],
@@ -682,10 +700,24 @@ const SECTIONS: Section[] = [
 
 /* -------- Page -------- */
 
-export function ChannelsPage() {
+export function ChannelsPage({
+  onCreateIntegration,
+  onViewWorkflow,
+  initialWebsite,
+  onInitialWebsiteConsumed,
+}: {
+  onCreateIntegration?: () => void;
+  onViewWorkflow?: (workflow: { id: string; name: string }) => void;
+  initialWebsite?: { name: string; domain: string } | null;
+  onInitialWebsiteConsumed?: () => void;
+} = {}) {
   const [connected, setConnected] = useState<Record<string, boolean>>({});
   const [openId, setOpenId] = useState<string | null>(null);
-  const [listId, setListId] = useState<string | null>(null);
+  const [listId, setListId] = useState<string | null>(initialWebsite ? "website" : null);
+
+  useEffect(() => {
+    if (initialWebsite) onInitialWebsiteConsumed?.();
+  }, [initialWebsite, onInitialWebsiteConsumed]);
 
   const toggleConnected = (id: string) => setConnected((s) => ({ ...s, [id]: !s[id] }));
 
@@ -705,11 +737,14 @@ export function ChannelsPage() {
         <ChannelListView
           channelId={listChannel.id}
           channelName={listChannel.name}
+          initialWebsite={listChannel.id === "website" ? initialWebsite : null}
           onBack={() => setListId(null)}
           onCreate={() => {
             setListId(null);
             setOpenId(listChannel.id);
           }}
+          onCreateIntegration={onCreateIntegration}
+          onViewWorkflow={onViewWorkflow}
         />
       </PageContainer>
     );

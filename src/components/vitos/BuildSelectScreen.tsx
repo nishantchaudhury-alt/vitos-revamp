@@ -48,6 +48,7 @@ import bgRight from "@/assets/vitos-bg-right.png";
 import integrationsHeroBg from "@/assets/integrations-hero-bg.webp";
 import { HomeOverview } from "./HomeOverview";
 import { AgentsListPage, ALL_AGENTS, type Agent, type AgentTypeKey } from "./AgentsListPage";
+import { ConversationFlowBuilder } from "./ConversationFlowBuilder";
 import { AgentTypeSelect, type AgentType } from "./AgentTypeSelect";
 import { IndustrySelect } from "./IndustrySelect";
 import { NameAgentScreen } from "./NameAgentScreen";
@@ -209,6 +210,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
     | "knowledge"
   >("home");
   const [schemaAutoOpen, setSchemaAutoOpen] = useState(false);
+  const [openNewIntegrationOnEntry, setOpenNewIntegrationOnEntry] = useState(false);
   const [agentTypeOrigin, setAgentTypeOrigin] = useState<"home" | "agents">("home");
   const [agentsReopenKey, setAgentsReopenKey] = useState(0);
   const [reopenCreatePanel, setReopenCreatePanel] = useState(false);
@@ -226,6 +228,11 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
     }
   });
   const [creationNotice, setCreationNotice] = useState<string | null>(null);
+  const [activeAgentBuilder, setActiveAgentBuilder] = useState<Agent | null>(null);
+  const [deploymentWebsiteTarget, setDeploymentWebsiteTarget] = useState<{
+    name: string;
+    domain: string;
+  } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLElement | null>(null);
@@ -260,6 +267,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
       name,
       type,
       subType,
+      voiceMode: subType === "voice" ? "single" : undefined,
       lastModified: "just now",
       lastModifiedAt: createdAt.toISOString().slice(0, 16).replace("T", " "),
       status: "in_build",
@@ -277,10 +285,12 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
     <div className="flex h-dvh w-full overflow-hidden bg-[#FAFAFA]">
       {/* Sidebar */}
       <aside
-        onMouseEnter={() => collapsed && setHovered(true)}
+        onMouseEnter={() => collapsed && !activeAgentBuilder && setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        className={`flex shrink-0 flex-col justify-between border-r border-sidebar-border bg-white/80 backdrop-blur transition-[width] duration-200 ease-in-out ${
-          isExpanded ? "w-52" : "w-12"
+        className={`flex shrink-0 flex-col justify-between overflow-hidden bg-white/80 backdrop-blur transition-[width,opacity] duration-200 ease-in-out ${
+          activeAgentBuilder
+            ? "w-12 border-r border-sidebar-border opacity-100"
+            : `border-r border-sidebar-border ${isExpanded ? "w-52" : "w-12"}`
         }`}
       >
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -297,14 +307,16 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
             )}
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                if (activeAgentBuilder) return;
                 setCollapsed((c) => {
                   setHovered(false);
                   return !c;
-                })
-              }
+                });
+              }}
+              aria-disabled={Boolean(activeAgentBuilder)}
               className="rounded-md p-1.5 text-muted-foreground hover:bg-hover"
-              aria-label="Toggle sidebar"
+              aria-label={activeAgentBuilder ? "Sidebar collapsed" : "Toggle sidebar"}
             >
               <PanelLeft className="h-4 w-4" />
             </button>
@@ -331,6 +343,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
                 <button
                   type="button"
                   onClick={() => {
+                    setActiveAgentBuilder(null);
                     setView("home");
                     setActiveAgentKey(null);
                     setActiveBuildKey(null);
@@ -369,6 +382,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               type="button"
               aria-label="AOP"
               onClick={() => {
+                setActiveAgentBuilder(null);
                 setView("aop");
                 setActiveAgentKey(null);
                 setAgentsOpen(false);
@@ -389,6 +403,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
                 type="button"
                 aria-label="Agents"
                 onClick={() => {
+                  setActiveAgentBuilder(null);
                   setAgentsOpen(false);
                   setActiveAgentKey("all");
                   setReopenCreatePanel(false);
@@ -410,6 +425,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               type="button"
               aria-label="Integrations"
               onClick={() => {
+                setActiveAgentBuilder(null);
                 setView("integrations");
                 setActiveAgentKey(null);
                 setAgentsOpen(false);
@@ -441,6 +457,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               type="button"
               aria-label="Schema"
               onClick={() => {
+                setActiveAgentBuilder(null);
                 setView("schema");
                 setActiveAgentKey(null);
                 setAgentsOpen(false);
@@ -460,6 +477,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               type="button"
               aria-label="Knowledge"
               onClick={() => {
+                setActiveAgentBuilder(null);
                 setView("knowledge");
                 setActiveAgentKey(null);
                 setAgentsOpen(false);
@@ -479,6 +497,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               type="button"
               aria-label="Channels"
               onClick={() => {
+                setActiveAgentBuilder(null);
                 setView("channels");
                 setActiveAgentKey(null);
                 setAgentsOpen(false);
@@ -498,6 +517,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               type="button"
               aria-label="Providers"
               onClick={() => {
+                setActiveAgentBuilder(null);
                 setView("providers");
                 setActiveAgentKey(null);
                 setAgentsOpen(false);
@@ -625,12 +645,14 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
       <main
         ref={mainRef}
         className={`relative flex-1 bg-[#FAFAFA] ${
-          view === "agent-type" ||
-          view === "industry" ||
-          view === "workflow-name" ||
-          view === "copilot-name"
-            ? "grid place-items-center overflow-y-auto px-10 pb-10 pt-24 xl:pt-32"
-            : "flex flex-col overflow-y-auto"
+          activeAgentBuilder
+            ? "flex flex-col overflow-hidden"
+            : view === "agent-type" ||
+                view === "industry" ||
+                view === "workflow-name" ||
+                view === "copilot-name"
+              ? "grid place-items-center overflow-y-auto px-10 pb-10 pt-24 xl:pt-32"
+              : "flex flex-col overflow-y-auto"
         }`}
       >
         <div
@@ -648,7 +670,31 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               : "flex flex-1 flex-col"
           }`}
         >
-          {view === "home" ? (
+          {activeAgentBuilder ? (
+            <ConversationFlowBuilder
+              agent={activeAgentBuilder}
+              workspaceName={workspaceName}
+              onBack={() => {
+                setActiveAgentBuilder(null);
+                setCollapsed(false);
+              }}
+              onCreateChannel={() => {
+                setActiveAgentBuilder(null);
+                setActiveAgentKey(null);
+                setCollapsed(false);
+                setHovered(false);
+                setView("channels");
+              }}
+              onWebsiteSelected={(website) => {
+                setDeploymentWebsiteTarget(website);
+                setActiveAgentBuilder(null);
+                setActiveAgentKey(null);
+                setCollapsed(false);
+                setHovered(false);
+                setView("channels");
+              }}
+            />
+          ) : view === "home" ? (
             <HomeOverview
               workspaceName={workspaceName}
               onStartBuilding={(key) => {
@@ -675,6 +721,11 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
               createdNotice={creationNotice}
               onDismissNotice={() => setCreationNotice(null)}
               initialCreateOpen={reopenCreatePanel}
+              onOpenAgent={(agent) => {
+                setActiveAgentBuilder(agent);
+                setCollapsed(true);
+                setHovered(false);
+              }}
               onCreateAgent={(key) => {
                 if (key === "conversation") {
                   setActiveBuildKey("conversational");
@@ -755,11 +806,42 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
           ) : view === "workspaces" ? (
             <AllWorkspacesPage currentWorkspace={workspaceName || "Kapture CX"} />
           ) : view === "integrations" ? (
-            <IntegrationsPage />
+            <IntegrationsPage
+              autoOpenNew={openNewIntegrationOnEntry}
+              onAutoOpenNewConsumed={() => setOpenNewIntegrationOnEntry(false)}
+            />
           ) : view === "providers" ? (
             <ProvidersPage />
           ) : view === "channels" ? (
-            <ChannelsPage />
+            <ChannelsPage
+              initialWebsite={deploymentWebsiteTarget}
+              onInitialWebsiteConsumed={() => setDeploymentWebsiteTarget(null)}
+              onViewWorkflow={(workflow) => {
+                const existingAgent = [...createdAgents, ...ALL_AGENTS].find(
+                  (agent) => agent.name === workflow.name,
+                );
+                setActiveAgentBuilder(
+                  existingAgent ?? {
+                    id: `website-workflow-${workflow.id}`,
+                    name: workflow.name,
+                    type: "conversation",
+                    subType: "text",
+                    lastModified: "just now",
+                    lastModifiedAt: new Date().toISOString(),
+                    status: "in_build",
+                  },
+                );
+                setActiveAgentKey("conversation");
+                setCollapsed(true);
+                setHovered(false);
+              }}
+              onCreateIntegration={() => {
+                setOpenNewIntegrationOnEntry(true);
+                setView("integrations");
+                setActiveAgentKey(null);
+                setAgentsOpen(false);
+              }}
+            />
           ) : view === "knowledge" ? (
             <KnowledgePage />
           ) : null}

@@ -94,8 +94,14 @@ function isStoredMcpCredential(value: unknown): value is McpCredential {
   );
 }
 
-export function IntegrationsPage() {
-  const [isInFlow, setIsInFlow] = useState(false);
+export function IntegrationsPage({
+  autoOpenNew = false,
+  onAutoOpenNewConsumed,
+}: {
+  autoOpenNew?: boolean;
+  onAutoOpenNewConsumed?: () => void;
+} = {}) {
+  const [isInFlow, setIsInFlow] = useState(autoOpenNew);
   const [sectionTab, setSectionTab] = useState<
     "apis" | "mcp" | "auth" | "policy" | "logs" | "observability"
   >("apis");
@@ -234,7 +240,11 @@ export function IntegrationsPage() {
         </>
       )}
       {sectionTab === "apis" ? (
-        <WorkflowIntegrations onFlowChange={setIsInFlow} />
+        <WorkflowIntegrations
+          onFlowChange={setIsInFlow}
+          autoOpenNew={autoOpenNew}
+          onAutoOpenNewConsumed={onAutoOpenNewConsumed}
+        />
       ) : sectionTab === "mcp" ? null : sectionTab === "auth" ? (
         <AuthenticationTab
           credentialsIntent={credentialsIntent}
@@ -569,9 +579,7 @@ function MCPSection({
                         moveCredentialFocus(credential.id, -1);
                       } else if (event.key === "Home") {
                         event.preventDefault();
-                        credentialOptionRefs.current
-                          .get(selectableCredentials[0]?.id)
-                          ?.focus();
+                        credentialOptionRefs.current.get(selectableCredentials[0]?.id)?.focus();
                       } else if (event.key === "End") {
                         event.preventDefault();
                         credentialOptionRefs.current
@@ -624,9 +632,7 @@ function MCPSection({
                           <span className="shrink-0">· Read only</span>
                         )}
                         <span className="ml-auto shrink-0 text-[9px]">
-                          {credential.expiry === "—"
-                            ? "No expiry"
-                            : `Expires ${credential.expiry}`}
+                          {credential.expiry === "—" ? "No expiry" : `Expires ${credential.expiry}`}
                         </span>
                       </span>
                     </span>
@@ -898,15 +904,16 @@ function MCPSection({
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-muted-foreground transition hover:bg-hover hover:text-foreground"
                   >
                     {toolsOpen ? "Collapse" : "Expand"}
-                    <ChevronDown
-                      className={cn("h-4 w-4 transition", toolsOpen && "rotate-180")}
-                    />
+                    <ChevronDown className={cn("h-4 w-4 transition", toolsOpen && "rotate-180")} />
                   </button>
                 </div>
 
                 {toolsOpen ? (
                   tools.length === 0 ? (
-                    <div id="mcp-tools-list" className="border-t border-border px-4 py-8 text-center">
+                    <div
+                      id="mcp-tools-list"
+                      className="border-t border-border px-4 py-8 text-center"
+                    >
                       <p className="text-xs text-muted-foreground">
                         No tools match this credential's scopes. Update the scopes before connecting
                         the client.
@@ -1581,9 +1588,23 @@ const TABS: { id: IntegrationTab; label: string }[] = [
   { id: "agent-as-api", label: "Agent as API" },
 ];
 
-function WorkflowIntegrations({ onFlowChange }: { onFlowChange?: (v: boolean) => void } = {}) {
-  const [isCreating, setIsCreating] = useState(false);
+function WorkflowIntegrations({
+  onFlowChange,
+  autoOpenNew = false,
+  onAutoOpenNewConsumed,
+}: {
+  onFlowChange?: (v: boolean) => void;
+  autoOpenNew?: boolean;
+  onAutoOpenNewConsumed?: () => void;
+} = {}) {
+  const [isCreating, setIsCreating] = useState(autoOpenNew);
   const [activeRow, setActiveRow] = useState<StarterRow | null>(null);
+
+  useEffect(() => {
+    if (!autoOpenNew) return;
+    setIsCreating(true);
+    onAutoOpenNewConsumed?.();
+  }, [autoOpenNew, onAutoOpenNewConsumed]);
 
   useEffect(() => {
     onFlowChange?.(isCreating || activeRow !== null);

@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vitos — Chat Channel Deployment</title>
+    <style>
+      :root {
+        --brand: #b22257;
+        --brand-dark: #921b47;
+        --brand-soft: #fdf3f7;
+        --ink: #18151a;
+        --muted: #6f6872;
+        --line: #e8e3e8;
+        --surface: #ffffff;
+        --wash: #faf8fa;
+        --success: #067647;
+        --success-soft: #ecfdf3;
+        --warning: #a15c00;
+        --warning-soft: #fff6e5;
+        --shadow: 0 1px 3px rgba(32, 18, 27, 0.05);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: #fbfafb;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 14px;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 3px solid rgba(178, 34, 87, 0.22);
+        outline-offset: 2px;
+      }
+
+      .app {
+        min-height: 100%;
+        display: grid;
+        grid-template-columns: 208px 1fr;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        border-right: 1px solid var(--line);
+        background: var(--surface);
+        padding: 14px 10px;
+        display: flex;
+        flex-direction: column;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 8px 16px;
+        font-weight: 700;
+        font-size: 17px;
+      }
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: radial-gradient(circle at 32% 25%, #e9548d, #5f0028 70%);
+        box-shadow: inset 0 0 0 2px #350014;
+      }
+      .workspace {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 8px 15px;
+        border-top: 1px solid var(--line);
+        font-weight: 600;
+      }
+      .section-label {
+        margin: 12px 8px 6px;
+        color: #938b94;
+        font-size: 9px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .nav-item {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: #554f57;
+        border-radius: 999px;
+        padding: 8px 10px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        text-align: left;
+        font-size: 12px;
+      }
+      .nav-item:hover {
+        background: #f8f5f7;
+      }
+      .nav-item.active {
+        background: var(--brand);
+        color: white;
+      }
+      .nav-icon {
+        width: 16px;
+        text-align: center;
+        opacity: 0.8;
+      }
+      .profile {
+        margin-top: auto;
+        padding: 14px 8px 0;
+        border-top: 1px solid var(--line);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--brand);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+      }
+
+      main {
+        min-width: 0;
+        padding: 18px 22px 28px;
+        background:
+          radial-gradient(circle at 94% 50%, rgba(178, 34, 87, 0.045), transparent 23%), #fbfafb;
+      }
+      .page {
+        max-width: 1230px;
+        margin: 0 auto;
+      }
+      .crumbs {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        margin: 1px 0 15px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .crumbs .current {
+        color: var(--brand);
+        font-weight: 600;
+      }
+      .shell {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+      .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .page-header h1 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .page-header p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .icon-button {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        border: 1px solid var(--brand);
+        background: white;
+        color: var(--brand);
+        font-size: 17px;
+      }
+
+      .content {
+        padding: 13px;
+        display: grid;
+        gap: 12px;
+      }
+      .panel {
+        border-radius: 13px;
+        background: var(--wash);
+        padding: 10px;
+      }
+      .panel-heading {
+        padding: 0 3px 9px;
+        border-bottom: 1px solid var(--line);
+      }
+      .panel-heading h2,
+      .deploy-heading h2 {
+        margin: 0;
+        font-size: 13px;
+      }
+      .panel-heading p,
+      .deploy-heading p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .overview-card {
+        margin-top: 9px;
+        padding: 12px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .initial {
+        flex: 0 0 auto;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--brand-soft);
+        border: 1px solid #f5cad9;
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .identity {
+        min-width: 0;
+        flex: 1;
+      }
+      .identity h3 {
+        margin: 0;
+        font-size: 13px;
+      }
+      .identity p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 5px;
+      }
+      .badge {
+        border-radius: 999px;
+        padding: 3px 7px;
+        font-size: 9px;
+        font-weight: 600;
+      }
+      .badge.live {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+      .badge.user {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(95px, 1fr));
+        gap: 24px;
+        text-align: right;
+      }
+      .stat-label {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-size: 9px;
+        font-weight: 700;
+      }
+      .stat-value {
+        margin-top: 4px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      .credential {
+        display: none;
+        border: 1px solid #a6efc6;
+        background: var(--success-soft);
+        color: #075a38;
+        border-radius: 12px;
+        padding: 12px;
+        align-items: center;
+        gap: 12px;
+      }
+      .credential.visible {
+        display: flex;
+      }
+      .credential-icon {
+        flex: 0 0 auto;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: #d1fadf;
+      }
+      .credential-copy {
+        min-width: 0;
+        flex: 1;
+      }
+      .credential-copy strong {
+        display: block;
+        font-size: 12px;
+      }
+      .credential-copy small {
+        display: block;
+        margin-top: 2px;
+      }
+      .credential-copy code {
+        display: block;
+        margin-top: 5px;
+        font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .deploy-panel {
+        border: 1px solid var(--line);
+        background: white;
+        border-radius: 13px;
+        overflow: hidden;
+      }
+      .deploy-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(100deg, var(--brand-soft) 0%, #fff 55%);
+      }
+      .primary,
+      .secondary {
+        min-height: 34px;
+        border-radius: 9px;
+        padding: 0 13px;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .primary {
+        border: 1px solid var(--brand);
+        background: var(--brand);
+        color: white;
+        box-shadow: 0 2px 4px rgba(178, 34, 87, 0.15);
+      }
+      .primary:hover {
+        background: var(--brand-dark);
+      }
+      .primary:disabled {
+        cursor: not-allowed;
+        background: #cbc6ca;
+        border-color: #cbc6ca;
+        box-shadow: none;
+      }
+      .secondary {
+        border: 1px solid var(--line);
+        background: white;
+        color: var(--ink);
+      }
+      .secondary:hover {
+        background: #f8f5f7;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        min-width: 850px;
+        border-collapse: collapse;
+        text-align: left;
+      }
+      th {
+        padding: 9px 13px;
+        background: #faf9fa;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      td {
+        padding: 11px 13px;
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+        vertical-align: middle;
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      tbody tr:hover {
+        background: #fdfbfc;
+      }
+      .workflow-name {
+        font-weight: 650;
+      }
+      .flow-id {
+        margin-top: 3px;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 9px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border-radius: 999px;
+        padding: 4px 7px;
+        font-size: 9px;
+        font-weight: 650;
+      }
+      .status::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .status.active {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+      .status.inactive {
+        background: #f3f1f3;
+        color: #777078;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: none;
+        place-items: center;
+        padding: 18px;
+        background: rgba(29, 19, 26, 0.48);
+        z-index: 30;
+      }
+      .modal-backdrop.open {
+        display: grid;
+      }
+      .modal {
+        width: min(820px, 100%);
+        max-height: calc(100vh - 36px);
+        display: flex;
+        flex-direction: column;
+        background: white;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        box-shadow: 0 20px 60px rgba(28, 15, 23, 0.24);
+        overflow: hidden;
+      }
+      .modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      .modal-header h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+      .modal-header p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .close {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: 21px;
+        line-height: 1;
+      }
+      .stepper {
+        padding: 11px 18px;
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 9px;
+      }
+      .step {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .step-number {
+        width: 22px;
+        height: 22px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        font-weight: 700;
+      }
+      .step.current,
+      .step.done {
+        color: var(--ink);
+        font-weight: 650;
+      }
+      .step.current .step-number,
+      .step.done .step-number {
+        color: white;
+        background: var(--brand);
+        border-color: var(--brand);
+      }
+      .modal-content {
+        min-height: 365px;
+        overflow-y: auto;
+        padding: 19px;
+      }
+      .screen {
+        display: none;
+      }
+      .screen.active {
+        display: block;
+      }
+      .screen h3 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .screen > p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .search {
+        margin-top: 14px;
+        width: min(340px, 100%);
+        height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0 11px;
+        background: #faf9fa;
+      }
+      .options {
+        display: grid;
+        gap: 9px;
+        margin-top: 14px;
+      }
+      .options.columns {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .option {
+        position: relative;
+        width: 100%;
+        min-height: 76px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: white;
+        padding: 12px 42px 12px 12px;
+        text-align: left;
+      }
+      .option:hover {
+        border-color: rgba(178, 34, 87, 0.45);
+      }
+      .option.selected {
+        border-color: var(--brand);
+        background: rgba(253, 243, 247, 0.7);
+        box-shadow: inset 0 0 0 1px rgba(178, 34, 87, 0.08);
+      }
+      .option .radio {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1px solid var(--line);
+        display: grid;
+        place-items: center;
+        color: white;
+        font-size: 11px;
+      }
+      .option.selected .radio {
+        border-color: var(--brand);
+        background: var(--brand);
+      }
+      .option-title {
+        font-weight: 700;
+        font-size: 12px;
+      }
+      .option-meta {
+        margin-top: 5px;
+        color: var(--brand);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+      .option-description {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.45;
+      }
+      .guest-note,
+      .phase-note {
+        margin-top: 14px;
+        border-radius: 10px;
+        padding: 11px 12px;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .guest-note {
+        background: var(--success-soft);
+        border: 1px solid #a6efc6;
+        color: #075a38;
+      }
+      .phase-note {
+        background: var(--warning-soft);
+        border: 1px solid #f6d69b;
+        color: #7a4700;
+      }
+      .review {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        overflow: hidden;
+      }
+      .review-row {
+        display: grid;
+        grid-template-columns: 165px 1fr;
+        gap: 14px;
+        padding: 11px 13px;
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .review-row:last-child {
+        border-bottom: 0;
+      }
+      .review-label {
+        color: var(--muted);
+      }
+      .review-value {
+        font-weight: 650;
+      }
+      .modal-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        transform: translateY(20px);
+        opacity: 0;
+        pointer-events: none;
+        background: #20181d;
+        color: white;
+        border-radius: 10px;
+        padding: 11px 14px;
+        font-size: 11px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        transition: 0.2s ease;
+        z-index: 50;
+      }
+      .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+      }
+
+      @media (max-width: 850px) {
+        .app {
+          grid-template-columns: 70px 1fr;
+        }
+        .brand span,
+        .workspace span,
+        .nav-item span:not(.nav-icon),
+        .section-label,
+        .profile span {
+          display: none;
+        }
+        .brand,
+        .workspace,
+        .nav-item,
+        .profile {
+          justify-content: center;
+        }
+        .sidebar {
+          padding-inline: 8px;
+        }
+        main {
+          padding: 14px;
+        }
+        .stats {
+          display: none;
+        }
+        .options.columns {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 600px) {
+        .app {
+          display: block;
+        }
+        .sidebar {
+          display: none;
+        }
+        .overview-card {
+          align-items: flex-start;
+        }
+        .deploy-header {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .step span:last-child {
+          display: none;
+        }
+        .review-row {
+          grid-template-columns: 1fr;
+          gap: 3px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">V</div>
+          <span>Vitos</span>
+        </div>
+        <div class="workspace"><span class="nav-icon">⌂</span><span>Kapture CX</span></div>
+        <div class="section-label">Build</div>
+        <button class="nav-item"><span class="nav-icon">⌘</span><span>AOP</span></button>
+        <button class="nav-item"><span class="nav-icon">◎</span><span>Agents</span></button>
+        <button class="nav-item"><span class="nav-icon">⌁</span><span>Integrations</span></button>
+        <div class="section-label">Resources</div>
+        <button class="nav-item"><span class="nav-icon">▱</span><span>Schema</span></button>
+        <button class="nav-item"><span class="nav-icon">▤</span><span>Knowledge</span></button>
+        <button class="nav-item active">
+          <span class="nav-icon">◉</span><span>Channels</span>
+        </button>
+        <button class="nav-item"><span class="nav-icon">▣</span><span>Providers</span></button>
+        <div class="section-label">Operate</div>
+        <button class="nav-item"><span class="nav-icon">⌁</span><span>Simulation</span></button>
+        <button class="nav-item"><span class="nav-icon">⌇</span><span>Observability</span></button>
+        <div class="profile">
+          <div class="avatar">S</div>
+          <span>Swati · Support Manager</span>
+        </div>
+      </aside>
+
+      <main>
+        <div class="page">
+          <nav class="crumbs" aria-label="Breadcrumb">
+            <span>Channels</span><span>›</span><span class="current">Chat</span>
+          </nav>
+          <section class="shell">
+            <header class="page-header">
+              <div>
+                <h1>Chat Configuration</h1>
+                <p>Manage the channel and deploy published workflows.</p>
+              </div>
+              <button class="icon-button" aria-label="Delete chat configuration" title="Delete">
+                ⌫
+              </button>
+            </header>
+
+            <div class="content">
+              <section class="panel" aria-labelledby="overview-title">
+                <div class="panel-heading">
+                  <h2 id="overview-title">Overview</h2>
+                  <p>Channel identity and customer access mode.</p>
+                </div>
+                <div class="overview-card">
+                  <div class="initial">C</div>
+                  <div class="identity">
+                    <h3>Customer Support Chat</h3>
+                    <div class="badges">
+                      <span class="badge live">Active</span
+                      ><span class="badge user">Registered User</span>
+                    </div>
+                    <p>support.kapturecrm.com · chat_support_india</p>
+                  </div>
+                  <div class="stats">
+                    <div>
+                      <div class="stat-label">Active bots</div>
+                      <div class="stat-value" id="active-count">1</div>
+                    </div>
+                    <div>
+                      <div class="stat-label">Credentials</div>
+                      <div class="stat-value" style="color: var(--success)">Ready</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="credential" id="credential-banner" aria-live="polite">
+                <div class="credential-icon">⌘</div>
+                <div class="credential-copy">
+                  <strong>Chat credential generated</strong
+                  ><small
+                    >Copy this prototype credential now. A production secret would be shown only
+                    once.</small
+                  ><code id="credential-value"></code>
+                </div>
+                <button class="secondary" id="copy-credential">Copy credential</button>
+              </section>
+
+              <section class="deploy-panel" aria-labelledby="deployments-title">
+                <header class="deploy-header">
+                  <div class="deploy-heading">
+                    <h2 id="deployments-title">Agent deployments</h2>
+                    <p>View deployed bots and launch a published workflow on this channel.</p>
+                  </div>
+                  <button class="primary" id="open-deploy">＋ Deploy agent</button>
+                </header>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Workflow</th>
+                        <th>Version</th>
+                        <th>Customer API</th>
+                        <th>Chat UI</th>
+                        <th>Status</th>
+                        <th>Deployed on</th>
+                      </tr>
+                    </thead>
+                    <tbody id="deployment-rows">
+                      <tr data-active="true">
+                        <td>
+                          <div class="workflow-name">SK finance chatbot Final</div>
+                          <div class="flow-id">95f678fb-1fdc-48b3-a5bb-59011354875a</div>
+                        </td>
+                        <td>v2.0</td>
+                        <td>Customer Profile API</td>
+                        <td>testing</td>
+                        <td><span class="status active">Active</span></td>
+                        <td>28 Sep 2026, 09:58</td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <div class="workflow-name">Customer Support Assistant</div>
+                          <div class="flow-id">42b933a1-09d5-4fb4-a7b9-44d61e9670ca</div>
+                        </td>
+                        <td>v2.4</td>
+                        <td>Customer Lookup Function</td>
+                        <td>Green</td>
+                        <td><span class="status inactive">Inactive</span></td>
+                        <td>12 Sep 2026, 16:20</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="deploy-modal">
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-header">
+          <div>
+            <h2 id="modal-title">Deploy agent</h2>
+            <p>Configure a deployment for Customer Support Chat.</p>
+          </div>
+          <button class="close" id="close-modal" aria-label="Close">×</button>
+        </header>
+        <ol class="stepper" id="stepper">
+          <li class="step current"><span class="step-number">1</span><span>Workflow</span></li>
+          <li class="step"><span class="step-number">2</span><span>Customer data</span></li>
+          <li class="step"><span class="step-number">3</span><span>Chat UI</span></li>
+          <li class="step"><span class="step-number">4</span><span>Review</span></li>
+        </ol>
+        <div class="modal-content">
+          <section class="screen active" data-step="1">
+            <h3>Select a workflow</h3>
+            <p>Only published workflow versions are available for deployment.</p>
+            <input
+              class="search"
+              id="workflow-search"
+              placeholder="Search workflows…"
+              aria-label="Search workflows"
+            />
+            <div class="options" id="workflow-options"></div>
+          </section>
+          <section class="screen" data-step="2">
+            <h3>Configure customer data</h3>
+            <p>
+              Registered users require an Integration that can fetch, search, or save customer
+              records.
+            </p>
+            <div class="options" id="api-options"></div>
+          </section>
+          <section class="screen" data-step="3">
+            <h3>Choose a Chat UI</h3>
+            <p>The multimedia chat experience is configured as part of this deployment.</p>
+            <div class="options columns" id="ui-options"></div>
+          </section>
+          <section class="screen" data-step="4">
+            <h3>Review deployment</h3>
+            <p>Confirm the configuration before deploying this agent.</p>
+            <div class="review" id="review"></div>
+            <div class="phase-note">
+              Phase one supports one active deployment per Chat connection. The current active bot
+              remains in deployment history as inactive.
+            </div>
+          </section>
+        </div>
+        <footer class="modal-footer">
+          <button class="secondary" id="back-button">Cancel</button
+          ><button class="primary" id="next-button" disabled>Continue</button>
+        </footer>
+      </section>
+    </div>
+    <div class="toast" id="toast">Copied to clipboard</div>
+
+    <script>
+      const workflows = [
+        {
+          id: "support-v3",
+          name: "Customer Support Assistant",
+          flow: "42b933a1-09d5-4fb4-a7b9-44d61e9670ca",
+          version: "3.0",
+          description: "Resolves support questions and escalates complex conversations.",
+        },
+        {
+          id: "finance-v2",
+          name: "SK finance chatbot Final",
+          flow: "95f678fb-1fdc-48b3-a5bb-59011354875a",
+          version: "2.1",
+          description: "Handles finance FAQs, account questions, and document requests.",
+        },
+        {
+          id: "sales-v2",
+          name: "Lead Qualification Flow",
+          flow: "781c8e0d-b4bc-45fa-9031-1d8f4bb00e76",
+          version: "2.0",
+          description: "Qualifies inbound leads and routes high-intent customers.",
+        },
+      ];
+      const apis = [
+        {
+          id: "customer-rest",
+          name: "Customer Profile API",
+          meta: "REST API",
+          description: "Fetch · Search · Save",
+        },
+        {
+          id: "customer-cloud",
+          name: "Customer Lookup Function",
+          meta: "Cloud Function",
+          description: "Fetch · Search",
+        },
+        {
+          id: "customer-agent",
+          name: "Customer Data Agent",
+          meta: "Agent as API",
+          description: "Fetch · Search · Save",
+        },
+      ];
+      const chatUis = [
+        {
+          id: "testing",
+          name: "testing",
+          meta: "Visual bot",
+          description: "Current support experience",
+        },
+        { id: "green", name: "Green", meta: "Visual bot", description: "Green UI" },
+        { id: "unnamed", name: "Unnamed", meta: "Visual bot", description: "Default website chat" },
+      ];
+
+      const state = { step: 1, workflowId: "", apiId: "", uiId: "" };
+      const modal = document.querySelector("#deploy-modal");
+      const next = document.querySelector("#next-button");
+      const back = document.querySelector("#back-button");
+
+      function optionMarkup(item, group) {
+        const selected = state[group] === item.id;
+        const meta =
+          group === "workflowId" ? `Published · v${item.version} · ${item.flow}` : item.meta;
+        return `<button class="option ${selected ? "selected" : ""}" type="button" data-group="${group}" data-id="${item.id}" role="radio" aria-checked="${selected}"><span class="radio">${selected ? "✓" : ""}</span><span class="option-title">${item.name}</span><span class="option-meta">${meta}</span><span class="option-description">${item.description}</span></button>`;
+      }
+
+      function renderOptions() {
+        const q = document.querySelector("#workflow-search").value.trim().toLowerCase();
+        document.querySelector("#workflow-options").innerHTML = workflows
+          .filter((x) => x.name.toLowerCase().includes(q))
+          .map((x) => optionMarkup(x, "workflowId"))
+          .join("");
+        document.querySelector("#api-options").innerHTML = apis
+          .map((x) => optionMarkup(x, "apiId"))
+          .join("");
+        document.querySelector("#ui-options").innerHTML = chatUis
+          .map((x) => optionMarkup(x, "uiId"))
+          .join("");
+        document.querySelectorAll(".option").forEach((button) =>
+          button.addEventListener("click", () => {
+            state[button.dataset.group] = button.dataset.id;
+            renderOptions();
+            updateNavigation();
+          }),
+        );
+      }
+
+      function updateNavigation() {
+        document
+          .querySelectorAll(".screen")
+          .forEach((x) => x.classList.toggle("active", Number(x.dataset.step) === state.step));
+        document.querySelectorAll(".step").forEach((x, i) => {
+          x.classList.toggle("current", i + 1 === state.step);
+          x.classList.toggle("done", i + 1 < state.step);
+          x.querySelector(".step-number").textContent = i + 1 < state.step ? "✓" : i + 1;
+        });
+        back.textContent = state.step === 1 ? "Cancel" : "Back";
+        next.textContent = state.step === 4 ? "Deploy agent" : "Continue";
+        next.disabled =
+          (state.step === 1 && !state.workflowId) ||
+          (state.step === 2 && !state.apiId) ||
+          (state.step === 3 && !state.uiId);
+        if (state.step === 4) renderReview();
+      }
+
+      function renderReview() {
+        const workflow = workflows.find((x) => x.id === state.workflowId);
+        const api = apis.find((x) => x.id === state.apiId);
+        const ui = chatUis.find((x) => x.id === state.uiId);
+        document.querySelector("#review").innerHTML = [
+          ["Channel", "Customer Support Chat"],
+          ["Workflow", `${workflow.name} · v${workflow.version}`],
+          ["Customer API", api.name],
+          ["Chat UI", ui.name],
+          ["Activation", "Immediately after deployment"],
+        ]
+          .map(
+            ([label, value]) =>
+              `<div class="review-row"><div class="review-label">${label}</div><div class="review-value">${value}</div></div>`,
+          )
+          .join("");
+      }
+
+      function openModal() {
+        Object.assign(state, { step: 1, workflowId: "", apiId: "", uiId: "" });
+        document.querySelector("#workflow-search").value = "";
+        modal.classList.add("open");
+        document.body.style.overflow = "hidden";
+        renderOptions();
+        updateNavigation();
+        setTimeout(() => document.querySelector("#workflow-search").focus(), 30);
+      }
+      function closeModal() {
+        modal.classList.remove("open");
+        document.body.style.overflow = "";
+      }
+
+      function deploy() {
+        const workflow = workflows.find((x) => x.id === state.workflowId);
+        const api = apis.find((x) => x.id === state.apiId);
+        const ui = chatUis.find((x) => x.id === state.uiId);
+        document.querySelectorAll('#deployment-rows tr[data-active="true"]').forEach((row) => {
+          row.removeAttribute("data-active");
+          const status = row.querySelector(".status");
+          status.className = "status inactive";
+          status.textContent = "Inactive";
+        });
+        const row = document.createElement("tr");
+        row.dataset.active = "true";
+        row.innerHTML = `<td><div class="workflow-name">${workflow.name}</div><div class="flow-id">${workflow.flow}</div></td><td>v${workflow.version}</td><td>${api.name}</td><td>${ui.name}</td><td><span class="status active">Active</span></td><td>Just now</td>`;
+        document.querySelector("#deployment-rows").prepend(row);
+        const credential = `chat_live_${workflow.id}_${Math.random().toString(36).slice(2, 10)}`;
+        document.querySelector("#credential-value").textContent = credential;
+        document.querySelector("#credential-banner").classList.add("visible");
+        document.querySelector("#active-count").textContent = "1";
+        closeModal();
+        showToast("Agent deployed successfully");
+      }
+
+      function showToast(message) {
+        const toast = document.querySelector("#toast");
+        toast.textContent = message;
+        toast.classList.add("show");
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+
+      document.querySelector("#open-deploy").addEventListener("click", openModal);
+      document.querySelector("#close-modal").addEventListener("click", closeModal);
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeModal();
+      });
+      document.querySelector("#workflow-search").addEventListener("input", renderOptions);
+      back.addEventListener("click", () => {
+        if (state.step === 1) closeModal();
+        else {
+          state.step--;
+          updateNavigation();
+        }
+      });
+      next.addEventListener("click", () => {
+        if (state.step < 4) {
+          state.step++;
+          updateNavigation();
+        } else deploy();
+      });
+      document.querySelector("#copy-credential").addEventListener("click", async () => {
+        const value = document.querySelector("#credential-value").textContent;
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {}
+        showToast("Credential copied");
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modal.classList.contains("open")) closeModal();
+      });
+      renderOptions();
+      updateNavigation();
+    </script>
+  </body>
+</html>

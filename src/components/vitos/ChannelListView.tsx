@@ -1,14 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  ArrowRight,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Database,
+  ExternalLink,
+  MoreHorizontal,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
+  SlidersHorizontal,
   Trash2,
+  Unplug,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -246,6 +254,51 @@ const LIST_CONFIG: Record<string, ListConfig> = {
         primaryAgent: "—",
         createdDate: "2026-05-08 09:31:52",
         status: "disabled",
+      },
+    ],
+  },
+  chat: {
+    bannerHint:
+      "After a chat channel is created, open a row to configure its agent, domain and widget settings.",
+    columns: [
+      { id: "chatName", label: "Chat Name", sortable: true },
+      { id: "channelId", label: "Channel ID", sortable: true },
+      { id: "userType", label: "User Type", sortable: true },
+      { id: "deploymentStatus", label: "Deployment Status", sortable: true },
+    ],
+    rows: [
+      {
+        id: "1",
+        chatName: "Customer Support Chat",
+        channelId: "chat_support_india",
+        domain: "support.kapturecrm.com",
+        widgetId: "chat_A93FZ",
+        userType: "Registered User",
+        deploymentStatus: "Active",
+        createdDate: "2026-05-04 11:20:41",
+        status: "enabled",
+      },
+      {
+        id: "2",
+        chatName: "Sales Concierge",
+        channelId: "chat_sales_web",
+        domain: "www.kapturecrm.com",
+        widgetId: "chat_B72PQ",
+        userType: "Registered User",
+        deploymentStatus: "Active",
+        createdDate: "2026-05-16 12:05:19",
+        status: "enabled",
+      },
+      {
+        id: "3",
+        chatName: "Guest Helpdesk",
+        channelId: "chat_guest_help",
+        domain: "help.kapturecrm.com",
+        widgetId: "chat_C84LN",
+        userType: "Guest User",
+        deploymentStatus: "Not deployed",
+        createdDate: "2026-05-18 09:24:12",
+        status: "enabled",
       },
     ],
   },
@@ -491,19 +544,47 @@ export function ChannelListView({
   channelName,
   onBack,
   onCreate,
+  onCreateIntegration,
+  onViewWorkflow,
+  initialWebsite,
 }: {
   channelId: string;
   channelName: string;
   onBack: () => void;
   onCreate: () => void;
+  onCreateIntegration?: () => void;
+  onViewWorkflow?: (workflow: { id: string; name: string }) => void;
+  initialWebsite?: { name: string; domain: string } | null;
 }) {
   const config = LIST_CONFIG[channelId] ?? FALLBACK;
+  const configuredInitialWebsite =
+    channelId === "website" && initialWebsite
+      ? (config.rows.find(
+          (row) => row.websiteName === initialWebsite.name && row.domain === initialWebsite.domain,
+        ) ?? config.rows.find((row) => row.websiteName === initialWebsite.name))
+      : undefined;
+  const createdInitialWebsite =
+    channelId === "website" && initialWebsite && !configuredInitialWebsite
+      ? {
+          id: `deployed-${initialWebsite.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+          websiteName: initialWebsite.name,
+          domain: initialWebsite.domain,
+          userType: "Guest User",
+          widgetId: "Pending",
+          primaryAgent: "—",
+          createdDate: new Date().toISOString().slice(0, 19).replace("T", " "),
+          status: "enabled",
+        }
+      : undefined;
+  const initialRows = createdInitialWebsite ? [createdInitialWebsite, ...config.rows] : config.rows;
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ id: string; dir: "asc" | "desc" } | null>(null);
-  const [rows, setRows] = useState<Record<string, string>[]>(config.rows);
+  const [rows, setRows] = useState<Record<string, string>[]>(initialRows);
   const [deleteTarget, setDeleteTarget] = useState<Record<string, string> | null>(null);
   const [detailsTarget, setDetailsTarget] = useState<Record<string, string> | null>(null);
-  const [selectedWebsite, setSelectedWebsite] = useState<Record<string, string> | null>(null);
+  const [selectedWebsite, setSelectedWebsite] = useState<Record<string, string> | null>(
+    configuredInitialWebsite ?? createdInitialWebsite ?? null,
+  );
 
   const rowLabel = (r: Record<string, string>) =>
     r.displayName && r.displayName !== "—"
@@ -554,6 +635,8 @@ export function ChannelListView({
           row={selectedWebsite}
           onBack={() => setSelectedWebsite(null)}
           onDelete={() => setDeleteTarget(selectedWebsite)}
+          onCreateIntegration={onCreateIntegration}
+          onViewWorkflow={onViewWorkflow}
           onSave={(values) => {
             setRows((current) =>
               current.map((row) => (row.id === selectedWebsite.id ? { ...row, ...values } : row)),
@@ -795,6 +878,8 @@ const WEBSITE_DEPLOYMENTS = [
     flowId: "95f678fb-1fdc-48b3-a5bb-59011354875a",
     version: "0.1",
     deployment: "100%",
+    customerData: "required",
+    capabilities: ["Fetch", "Search"],
   },
   {
     id: "2",
@@ -802,6 +887,8 @@ const WEBSITE_DEPLOYMENTS = [
     flowId: "42b933a1-09d5-4fb4-a7b9-44d61e9670ca",
     version: "1.2",
     deployment: "75%",
+    customerData: "required",
+    capabilities: ["Fetch", "Search", "Save"],
   },
   {
     id: "3",
@@ -809,6 +896,8 @@ const WEBSITE_DEPLOYMENTS = [
     flowId: "781c8e0d-b4bc-45fa-9031-1d8f4bb00e76",
     version: "2.0",
     deployment: "50%",
+    customerData: "required",
+    capabilities: ["Search", "Save"],
   },
   {
     id: "4",
@@ -816,6 +905,8 @@ const WEBSITE_DEPLOYMENTS = [
     flowId: "d10ff327-a27e-4924-8c3d-c8709859db68",
     version: "0.8",
     deployment: "25%",
+    customerData: "optional",
+    capabilities: ["Fetch"],
   },
   {
     id: "5",
@@ -823,6 +914,8 @@ const WEBSITE_DEPLOYMENTS = [
     flowId: "f58c37f4-40cd-4de3-b18e-32f9955bf072",
     version: "0.3",
     deployment: "10%",
+    customerData: "none",
+    capabilities: [],
   },
 ];
 
@@ -906,16 +999,100 @@ const INTEGRATION_APIS = [
   },
 ];
 
+type WebsiteDeployment = (typeof WEBSITE_DEPLOYMENTS)[number];
+
+function WebsiteDeploymentConfiguration({
+  deployment,
+  onSelectIntegration,
+}: {
+  deployment: WebsiteDeployment;
+  onSelectIntegration: () => void;
+}) {
+  const customerDataRequired = deployment.customerData === "required";
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between",
+        customerDataRequired
+          ? "border-border/60 bg-gradient-to-r from-amber-50/30 via-white to-white shadow-[0_1px_3px_rgba(36,24,31,0.035)]"
+          : "border-border bg-card shadow-[0_1px_3px_rgba(36,24,31,0.04)]",
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+            customerDataRequired ? "bg-amber-50 text-amber-700" : "bg-[#FBEAF0] text-[#B22257]",
+          )}
+        >
+          <Database className="h-4 w-4" aria-hidden="true" />
+        </span>
+
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-[12.5px] font-semibold text-foreground">Connect customer data</h3>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[9px] font-semibold",
+                customerDataRequired
+                  ? "bg-amber-50 text-amber-700"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {customerDataRequired ? "Required to deploy" : "Optional"}
+            </span>
+          </div>
+
+          <p className="mt-1 text-[10.5px] leading-relaxed text-muted-foreground">
+            Select a published integration to give this workflow access to customer context.
+          </p>
+
+          {deployment.capabilities.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Uses
+              </span>
+              {deployment.capabilities.map((capability) => (
+                <span
+                  key={capability}
+                  className="rounded-md border border-border bg-muted/25 px-1.5 py-0.5 text-[9px] font-medium text-foreground"
+                >
+                  {capability}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onSelectIntegration}
+        aria-label={`Choose customer data integration for ${deployment.name}`}
+        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-[#B22257] px-3.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35 sm:self-center"
+      >
+        Choose integration
+        <ArrowRight className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function WebsiteConfigurationView({
   row,
   onBack,
   onDelete,
   onSave,
+  onCreateIntegration,
+  onViewWorkflow,
 }: {
   row: Record<string, string>;
   onBack: () => void;
   onDelete: () => void;
   onSave: (values: Record<string, string>) => void;
+  onCreateIntegration?: () => void;
+  onViewWorkflow?: (workflow: { id: string; name: string }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [websiteName, setWebsiteName] = useState(row.websiteName ?? "Website");
@@ -930,6 +1107,24 @@ function WebsiteConfigurationView({
     "all",
   );
   const [apiDraft, setApiDraft] = useState("");
+  const [actionMenu, setActionMenu] = useState<{
+    deploymentId: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  const [allocationTarget, setAllocationTarget] = useState<WebsiteDeployment | null>(null);
+  const [allocationDraft, setAllocationDraft] = useState(100);
+  const [undeployTarget, setUndeployTarget] = useState<WebsiteDeployment | null>(null);
+  const [deploymentAllocations, setDeploymentAllocations] = useState<Record<string, string>>(() => {
+    try {
+      if (row.deploymentAllocations) return JSON.parse(row.deploymentAllocations);
+    } catch {
+      // Fall back to the prototype defaults when stored allocation data is invalid.
+    }
+    return Object.fromEntries(
+      WEBSITE_DEPLOYMENTS.map((deployment) => [deployment.id, deployment.deployment]),
+    );
+  });
   const [apiAssignments, setApiAssignments] = useState<Record<string, string>>(() => {
     try {
       return row.apiAssignments ? JSON.parse(row.apiAssignments) : {};
@@ -940,6 +1135,18 @@ function WebsiteConfigurationView({
   const domainHref = /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
   const selectedDeploymentDetails = WEBSITE_DEPLOYMENTS.find(
     (deployment) => deployment.id === selectedDeployment,
+  );
+  const selectedApiId = selectedDeployment ? apiAssignments[selectedDeployment] : "";
+  const selectedApiDetails = INTEGRATION_APIS.find((api) => api.id === selectedApiId);
+  const actionDeployment = WEBSITE_DEPLOYMENTS.find(
+    (deployment) => deployment.id === actionMenu?.deploymentId,
+  );
+  const actionDeploymentApi = actionDeployment
+    ? INTEGRATION_APIS.find((api) => api.id === apiAssignments[actionDeployment.id])
+    : undefined;
+  const customerDataRequired = selectedDeploymentDetails?.customerData === "required";
+  const deploymentReady = Boolean(
+    selectedDeploymentDetails && visualBot && (!customerDataRequired || selectedApiDetails),
   );
   const filteredApis = INTEGRATION_APIS.filter((api) => {
     const matchesQuery = `${api.name} ${api.path} ${api.binding} ${api.owner}`
@@ -1094,88 +1301,164 @@ function WebsiteConfigurationView({
               >
                 Website Deployment Details
               </h2>
-              {selectedDeployment && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setApiDraft(apiAssignments[selectedDeployment] ?? "");
-                    setApiQuery("");
-                    setApiFilter("all");
-                    setApiConfigOpen(true);
-                  }}
-                  className="inline-flex h-8 items-center justify-center rounded-lg border border-[#B22257] bg-card px-3 text-[12px] font-medium text-[#B22257] transition hover:bg-[#FDF3F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
-                >
-                  Configure API
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={!deploymentReady}
+                onClick={() => setDeployedDeployment(selectedDeployment)}
+                className="inline-flex h-8 items-center justify-center rounded-lg bg-[#B22257] px-3 text-[12px] font-medium text-white shadow-sm transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-muted-foreground/35 disabled:shadow-none"
+              >
+                Deploy
+              </button>
             </header>
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <table className="w-full min-w-[720px] text-left text-[12.5px]">
+              <table className="w-full min-w-[760px] table-fixed text-left text-[12.5px]">
                 <thead className="border-b border-border bg-muted/35 text-muted-foreground">
                   <tr>
-                    <th className="w-16 px-3 py-2 font-medium">#</th>
-                    <th className="px-3 py-2 font-medium">Flow Name</th>
-                    <th className="px-3 py-2 font-medium">Flow ID</th>
-                    <th className="w-32 px-3 py-2 font-medium">Version</th>
-                    <th className="w-52 px-3 py-2 font-medium">Deployment Percentage</th>
+                    <th className="w-12 px-3 py-2 font-medium">#</th>
+                    <th className="w-56 px-3 py-2 font-medium">Workflow</th>
+                    <th className="w-20 px-3 py-2 font-medium">Version</th>
+                    <th className="w-24 px-3 py-2 font-medium">Allocation</th>
+                    <th className="w-48 px-3 py-2 text-right font-medium">Integration</th>
+                    <th className="w-28 px-3 py-2 text-right font-medium">Status</th>
+                    <th className="w-14 px-3 py-2 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {WEBSITE_DEPLOYMENTS.map((deployment) => {
                     const selected = selectedDeployment === deployment.id;
+                    const assignedApi = INTEGRATION_APIS.find(
+                      (api) => api.id === apiAssignments[deployment.id],
+                    );
                     return (
-                      <tr
-                        key={deployment.id}
-                        className={cn(
-                          "border-t border-border transition first:border-t-0",
-                          selected ? "bg-[#FDF3F7]/70" : "hover:bg-muted/20",
-                        )}
-                      >
-                        <td className="px-3 py-2 text-muted-foreground">
-                          <div className="flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              role="checkbox"
-                              aria-checked={selected}
-                              aria-label={`${selected ? "Deselect" : "Select"} ${deployment.name}`}
-                              onClick={() => {
-                                setSelectedDeployment((current) =>
-                                  current === deployment.id ? "" : deployment.id,
-                                );
-                                setDeployedDeployment("");
-                              }}
-                              className={cn(
-                                "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35 focus-visible:ring-offset-1",
-                                selected
-                                  ? "border-[#B22257] bg-[#B22257] text-white"
-                                  : "border-border bg-card hover:border-[#B22257]/55",
-                              )}
-                            >
-                              {selected && <Check className="h-2.5 w-2.5" aria-hidden="true" />}
-                            </button>
-                            <span>{deployment.id}.</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 font-medium text-foreground">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span>{deployment.name}</span>
-                            {apiAssignments[deployment.id] && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
+                      <Fragment key={deployment.id}>
+                        <tr
+                          className={cn(
+                            "border-t border-border transition first:border-t-0",
+                            selected ? "bg-[#FDF3F7]/70" : "hover:bg-muted/20",
+                          )}
+                        >
+                          <td className="px-3 py-2 text-muted-foreground">
+                            <div className="flex items-center gap-2.5">
+                              <button
+                                type="button"
+                                role="checkbox"
+                                aria-checked={selected}
+                                aria-label={`${selected ? "Deselect" : "Select"} ${deployment.name}`}
+                                onClick={() => {
+                                  setSelectedDeployment((current) =>
+                                    current === deployment.id ? "" : deployment.id,
+                                  );
+                                }}
+                                className={cn(
+                                  "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35 focus-visible:ring-offset-1",
+                                  selected
+                                    ? "border-[#B22257] bg-[#B22257] text-white"
+                                    : "border-border bg-card hover:border-[#B22257]/55",
+                                )}
+                              >
+                                {selected && <Check className="h-2.5 w-2.5" aria-hidden="true" />}
+                              </button>
+                              <span>{deployment.id}.</span>
+                            </div>
+                          </td>
+                          <td
+                            title={deployment.name}
+                            className="truncate px-3 py-2 font-medium text-foreground"
+                          >
+                            {deployment.name}
+                          </td>
+                          <td className="px-3 py-2 text-foreground">{deployment.version}</td>
+                          <td className="px-3 py-2 text-foreground">
+                            {deploymentAllocations[deployment.id] ?? deployment.deployment}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-2">
+                              {assignedApi ? (
                                 <span
-                                  className="h-1.5 w-1.5 rounded-full bg-emerald-500"
-                                  aria-hidden="true"
-                                />
-                                API configured
+                                  title={assignedApi.name}
+                                  className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-1 text-[9.5px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-100"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                  <span className="max-w-[150px] truncate">{assignedApi.name}</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10.5px] text-muted-foreground">
+                                  {deployment.customerData === "none"
+                                    ? "Not required"
+                                    : "Not configured"}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {deployedDeployment === deployment.id ? (
+                              <span
+                                role="status"
+                                className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200"
+                              >
+                                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                                Deployed
+                              </span>
+                            ) : (
+                              <span className="text-[10.5px] text-muted-foreground">
+                                Not deployed
                               </span>
                             )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 font-mono text-[12px] text-foreground">
-                          {deployment.flowId}
-                        </td>
-                        <td className="px-3 py-2 text-foreground">{deployment.version}</td>
-                        <td className="px-3 py-2 text-foreground">{deployment.deployment}</td>
-                      </tr>
+                          </td>
+                          <td className="relative px-3 py-2 text-right">
+                            {assignedApi || deployedDeployment === deployment.id ? (
+                              <button
+                                type="button"
+                                title="More actions"
+                                aria-label={`More actions for ${deployment.name}`}
+                                aria-haspopup="menu"
+                                aria-expanded={actionMenu?.deploymentId === deployment.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  const rect = event.currentTarget.getBoundingClientRect();
+                                  setActionMenu((current) =>
+                                    current?.deploymentId === deployment.id
+                                      ? null
+                                      : {
+                                          deploymentId: deployment.id,
+                                          top: Math.min(rect.bottom + 6, window.innerHeight - 210),
+                                          left: Math.max(12, rect.right - 224),
+                                        },
+                                  );
+                                }}
+                                className={cn(
+                                  "inline-flex h-7 w-7 items-center justify-center rounded-md border bg-card text-muted-foreground transition hover:border-[#B22257]/35 hover:bg-[#FDF3F7] hover:text-[#B22257] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
+                                  actionMenu?.deploymentId === deployment.id
+                                    ? "border-[#B22257]/35 bg-[#FDF3F7] text-[#B22257]"
+                                    : "border-border",
+                                )}
+                              >
+                                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground/40">—</span>
+                            )}
+                          </td>
+                        </tr>
+                        {selected &&
+                          selectedDeploymentDetails &&
+                          selectedDeploymentDetails.customerData !== "none" &&
+                          !selectedApiDetails && (
+                            <tr className="border-t border-[#E8D7DE] bg-muted/10">
+                              <td colSpan={7} className="p-3">
+                                <WebsiteDeploymentConfiguration
+                                  deployment={selectedDeploymentDetails}
+                                  onSelectIntegration={() => {
+                                    setApiDraft(selectedApiId);
+                                    setApiQuery("");
+                                    setApiFilter("all");
+                                    setApiConfigOpen(true);
+                                  }}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -1274,68 +1557,284 @@ function WebsiteConfigurationView({
                 selectedDeployment,
                 deployedDeployment,
                 apiAssignments: JSON.stringify(apiAssignments),
+                deploymentAllocations: JSON.stringify(deploymentAllocations),
               })
             }
             className="h-9 rounded-lg border border-[#B22257] bg-card px-4 text-[13px] font-medium text-[#B22257] transition hover:bg-[#FDF3F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
           >
             Save &amp; Update
           </button>
-          <button
-            type="button"
-            disabled={!selectedDeployment || !apiAssignments[selectedDeployment]}
-            onClick={() => setDeployedDeployment(selectedDeployment)}
-            className="h-9 rounded-lg bg-[#B22257] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-muted-foreground/35 disabled:shadow-none"
-          >
-            Deploy
-          </button>
         </footer>
       </section>
+
+      {actionMenu &&
+        actionDeployment &&
+        createPortal(
+          <>
+            <button
+              type="button"
+              aria-label="Close workflow actions"
+              onClick={() => setActionMenu(null)}
+              className="fixed inset-0 z-[70] cursor-default"
+            />
+            <div
+              role="menu"
+              aria-label={`Actions for ${actionDeployment.name}`}
+              className="fixed z-[80] w-56 overflow-hidden rounded-xl border border-border bg-card p-1.5 text-left shadow-[0_14px_36px_rgba(15,23,42,0.16)]"
+              style={{ top: actionMenu.top, left: actionMenu.left }}
+            >
+              {actionDeployment.customerData !== "none" && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setSelectedDeployment(actionDeployment.id);
+                    setApiDraft(actionDeploymentApi?.id ?? "");
+                    setApiQuery("");
+                    setApiFilter("all");
+                    setApiConfigOpen(true);
+                    setActionMenu(null);
+                  }}
+                  className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12px] font-medium text-foreground transition hover:bg-muted/50 focus:outline-none focus-visible:bg-[#FDF3F7] focus-visible:text-[#B22257]"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                  Change integration
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const currentAllocation = Number.parseInt(
+                    (
+                      deploymentAllocations[actionDeployment.id] ?? actionDeployment.deployment
+                    ).replace("%", ""),
+                    10,
+                  );
+                  setAllocationDraft(Number.isNaN(currentAllocation) ? 100 : currentAllocation);
+                  setAllocationTarget(actionDeployment);
+                  setActionMenu(null);
+                }}
+                className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12px] font-medium text-foreground transition hover:bg-muted/50 focus:outline-none focus-visible:bg-[#FDF3F7] focus-visible:text-[#B22257]"
+              >
+                <SlidersHorizontal
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                Edit allocation
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setActionMenu(null);
+                  onViewWorkflow?.({ id: actionDeployment.id, name: actionDeployment.name });
+                }}
+                className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12px] font-medium text-foreground transition hover:bg-muted/50 focus:outline-none focus-visible:bg-[#FDF3F7] focus-visible:text-[#B22257]"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                View workflow in Builder
+              </button>
+              {deployedDeployment === actionDeployment.id && (
+                <>
+                  <div className="my-1 border-t border-border" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setUndeployTarget(actionDeployment);
+                      setActionMenu(null);
+                    }}
+                    className="flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-[12px] font-medium text-red-600 transition hover:bg-red-50 focus:outline-none focus-visible:bg-red-50"
+                  >
+                    <Unplug className="h-3.5 w-3.5" aria-hidden="true" />
+                    Undeploy
+                  </button>
+                </>
+              )}
+            </div>
+          </>,
+          document.body,
+        )}
+
+      {allocationTarget && (
+        <ModalShell onClose={() => setAllocationTarget(null)}>
+          <div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FDF3F7] text-[#B22257]">
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            </div>
+            <h2 className="mt-3 text-[17px] font-semibold text-foreground">
+              Edit traffic allocation
+            </h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+              Choose how much website traffic should be routed to {allocationTarget.name}.
+            </p>
+
+            <div className="mt-5 rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <label
+                  htmlFor="deployment-allocation"
+                  className="text-[12px] font-medium text-foreground"
+                >
+                  Traffic allocation
+                </label>
+                <div className="flex h-9 items-center overflow-hidden rounded-lg border border-border bg-card">
+                  <input
+                    id="deployment-allocation-number"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={allocationDraft}
+                    onChange={(event) =>
+                      setAllocationDraft(
+                        Math.min(100, Math.max(1, Number(event.target.value) || 1)),
+                      )
+                    }
+                    className="h-full w-16 bg-transparent px-2 text-right text-[13px] font-semibold text-foreground outline-none"
+                    aria-label="Traffic allocation percentage"
+                  />
+                  <span className="pr-2 text-[12px] font-medium text-muted-foreground">%</span>
+                </div>
+              </div>
+              <input
+                id="deployment-allocation"
+                type="range"
+                min={1}
+                max={100}
+                value={allocationDraft}
+                onChange={(event) => setAllocationDraft(Number(event.target.value))}
+                className="mt-4 w-full accent-[#B22257]"
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+                <span>1%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAllocationTarget(null)}
+                className="h-9 rounded-lg border border-border bg-card px-4 text-[13px] font-medium text-foreground transition hover:bg-muted/40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeploymentAllocations((current) => ({
+                    ...current,
+                    [allocationTarget.id]: `${allocationDraft}%`,
+                  }));
+                  setAllocationTarget(null);
+                }}
+                className="h-9 rounded-lg bg-[#B22257] px-4 text-[13px] font-medium text-white transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40"
+              >
+                Save allocation
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {undeployTarget && (
+        <ModalShell onClose={() => setUndeployTarget(null)}>
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <Unplug className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <h2 className="mt-3 text-[17px] font-semibold text-foreground">Undeploy workflow?</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+            {undeployTarget.name} will stop receiving website traffic. Its integration and
+            allocation settings will be kept.
+          </p>
+          <div className="mt-6 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setUndeployTarget(null)}
+              className="h-9 rounded-lg border border-border bg-card px-4 text-[13px] font-medium text-foreground transition hover:bg-muted/40"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDeployedDeployment((current) => (current === undeployTarget.id ? "" : current));
+                setUndeployTarget(null);
+              }}
+              className="h-9 rounded-lg bg-red-600 px-4 text-[13px] font-medium text-white transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35"
+            >
+              Undeploy
+            </button>
+          </div>
+        </ModalShell>
+      )}
 
       {apiConfigOpen && selectedDeploymentDetails && (
         <ModalShell onClose={() => setApiConfigOpen(false)} size="wide">
           <div>
-            <h2 className="text-[18px] font-semibold text-foreground">Select an API</h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-              Choose an existing integration for {selectedDeploymentDetails.name}.
-            </p>
+            <div className="pr-8">
+              <h2 className="text-[18px] font-semibold text-foreground">
+                Select customer data integration
+              </h2>
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                Choose an existing integration for {selectedDeploymentDetails.name}.
+              </p>
+            </div>
 
-            <div
-              className="mt-4 flex items-center gap-6 overflow-x-auto border-b border-border"
-              role="tablist"
-              aria-label="API type"
-            >
-              {[
-                { id: "all" as const, label: "All" },
-                { id: "rest" as const, label: "REST APIs" },
-                { id: "database" as const, label: "Database APIs" },
-                { id: "cloud" as const, label: "Cloud Functions" },
-                { id: "agent" as const, label: "Agents as API" },
-              ].map((filter) => {
-                const active = apiFilter === filter.id;
-                return (
-                  <button
-                    key={filter.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setApiFilter(filter.id)}
-                    className={cn(
-                      "relative flex h-10 shrink-0 items-center gap-1.5 px-1 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
-                      active ? "text-[#B22257]" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {filter.label}
-                    {filter.id === "all" && (
-                      <span className="rounded-full bg-[#F7DFE8] px-1.5 py-0.5 text-[10px] font-semibold text-[#B22257]">
-                        {INTEGRATION_APIS.length}
-                      </span>
-                    )}
-                    {active && (
-                      <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[#B22257]" />
-                    )}
-                  </button>
-                );
-              })}
+            <div className="mt-4 flex items-center gap-3 border-b border-border">
+              <div
+                className="flex min-w-0 flex-1 items-center gap-6 overflow-x-auto"
+                role="tablist"
+                aria-label="API type"
+              >
+                {[
+                  { id: "all" as const, label: "All" },
+                  { id: "rest" as const, label: "REST APIs" },
+                  { id: "database" as const, label: "Database APIs" },
+                  { id: "cloud" as const, label: "Cloud Functions" },
+                  { id: "agent" as const, label: "Agents as API" },
+                ].map((filter) => {
+                  const active = apiFilter === filter.id;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setApiFilter(filter.id)}
+                      className={cn(
+                        "relative flex h-10 shrink-0 items-center gap-1.5 px-1 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
+                        active ? "text-[#B22257]" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {filter.label}
+                      {filter.id === "all" && (
+                        <span className="rounded-full bg-[#F7DFE8] px-1.5 py-0.5 text-[10px] font-semibold text-[#B22257]">
+                          {INTEGRATION_APIS.length}
+                        </span>
+                      )}
+                      {active && (
+                        <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[#B22257]" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {onCreateIntegration && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setApiConfigOpen(false);
+                    onCreateIntegration();
+                  }}
+                  className="mb-1 inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#B22257] bg-card px-3 text-[11px] font-medium text-[#B22257] transition hover:bg-[#FDF3F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
+                >
+                  <Plus className="h-3 w-3" aria-hidden="true" />
+                  Create new integration
+                </button>
+              )}
             </div>
 
             <label className="mt-3 flex h-9 w-full max-w-sm items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 focus-within:border-[#B22257]/40 focus-within:bg-card focus-within:ring-2 focus-within:ring-[#B22257]/10">
@@ -1467,7 +1966,7 @@ function WebsiteConfigurationView({
               }}
               className="h-9 rounded-lg bg-[#B22257] px-4 text-[13px] font-medium text-white transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40 disabled:cursor-not-allowed disabled:bg-muted-foreground/35"
             >
-              Use selected API
+              Use integration
             </button>
           </div>
         </ModalShell>

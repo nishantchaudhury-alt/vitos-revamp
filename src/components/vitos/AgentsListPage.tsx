@@ -31,10 +31,14 @@ import {
 } from "lucide-react";
 import { SolutionCard, ConversationPreview, WorkflowPreview, ApiPreview } from "./HomeOverview";
 import { PageContainer } from "./PageContainer";
+import { cn } from "@/lib/utils";
+import vitosLogo from "@/assets/vitos-logo.png";
+import bgRight from "@/assets/vitos-bg-right.png";
 
 export type AgentTypeKey = "conversation" | "workflow" | "api" | "multi";
 export type AgentStatus = "in_build" | "active" | "paused";
 export type ConversationSubType = "voice" | "text";
+export type VoiceMode = "single" | "multi";
 
 export interface Agent {
   id: string;
@@ -44,11 +48,13 @@ export interface Agent {
   lastModifiedAt: string;
   status: AgentStatus;
   subType?: ConversationSubType;
+  voiceMode?: VoiceMode;
 }
 
 interface Props {
   scope: "all" | AgentTypeKey;
   onCreateAgent?: (key: AgentTypeKey | "copilot") => void;
+  onOpenAgent?: (agent: Agent) => void;
   initialCreateOpen?: boolean;
   initialAgents?: Agent[];
   createdNotice?: string | null;
@@ -61,7 +67,7 @@ const TYPE_META: Record<
   AgentTypeKey,
   { label: string; bg: string; text: string; Icon: React.ComponentType<{ className?: string }> }
 > = {
-  conversation: { label: "Conversation", bg: "#FBEAF0", text: "#993556", Icon: MessageCircle },
+  conversation: { label: "Conversation", bg: "#EEEDFE", text: "#534AB7", Icon: MessageCircle },
   workflow: { label: "Work agent", bg: "#E6F1FB", text: "#185FA5", Icon: Cpu },
   api: { label: "Agent as API", bg: "#EAF3DE", text: "#3B6D11", Icon: Plug },
   multi: { label: "Multi-agent", bg: "#EEEDFE", text: "#534AB7", Icon: Network },
@@ -89,6 +95,7 @@ export const ALL_AGENTS: Agent[] = [
     name: "sibi_local_testing",
     type: "conversation",
     subType: "voice",
+    voiceMode: "single",
     lastModified: "11 hours ago",
     lastModifiedAt: "2026-07-14 03:12",
     status: "in_build",
@@ -108,7 +115,7 @@ export const ALL_AGENTS: Agent[] = [
     type: "api",
     lastModified: "4 days ago",
     lastModifiedAt: "2026-07-10 09:44",
-    status: "paused",
+    status: "in_build",
   },
   {
     id: "5",
@@ -124,7 +131,7 @@ export const ALL_AGENTS: Agent[] = [
     type: "workflow",
     lastModified: "7 days ago",
     lastModifiedAt: "2026-07-07 11:37",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "7",
@@ -132,16 +139,17 @@ export const ALL_AGENTS: Agent[] = [
     type: "workflow",
     lastModified: "2 days ago",
     lastModifiedAt: "2026-07-12 16:02",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "8",
     name: "lead_qualifier",
     type: "conversation",
     subType: "voice",
+    voiceMode: "multi",
     lastModified: "3 days ago",
     lastModifiedAt: "2026-07-11 08:15",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "9",
@@ -149,25 +157,27 @@ export const ALL_AGENTS: Agent[] = [
     type: "api",
     lastModified: "6 days ago",
     lastModifiedAt: "2026-07-08 12:48",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "10",
     name: "inbound_support_line",
     type: "conversation",
     subType: "voice",
+    voiceMode: "single",
     lastModified: "1 day ago",
     lastModifiedAt: "2026-07-13 22:10",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "11",
     name: "appointment_reminder_calls",
     type: "conversation",
     subType: "voice",
+    voiceMode: "multi",
     lastModified: "4 hours ago",
     lastModifiedAt: "2026-07-14 10:02",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "12",
@@ -176,7 +186,7 @@ export const ALL_AGENTS: Agent[] = [
     subType: "text",
     lastModified: "2 days ago",
     lastModifiedAt: "2026-07-12 19:33",
-    status: "active",
+    status: "in_build",
   },
   {
     id: "13",
@@ -185,7 +195,7 @@ export const ALL_AGENTS: Agent[] = [
     subType: "text",
     lastModified: "6 days ago",
     lastModifiedAt: "2026-07-08 07:29",
-    status: "paused",
+    status: "in_build",
   },
   {
     id: "14",
@@ -222,29 +232,39 @@ const EMPTY_STATES: Record<AgentTypeKey, { headline: string; cta: string }> = {
   },
 };
 
-type SortKey = "name" | "type" | "modified" | "status";
+type SortKey = "name" | "type" | "channel" | "modified" | "status";
 type SortDir = "asc" | "desc";
-type Density = "comfortable" | "compact";
+type ConversationFilter = ConversationSubType;
 
-const TYPE_OPTIONS: AgentTypeKey[] = ["conversation", "workflow", "api"];
 const STATUS_OPTIONS: AgentStatus[] = ["active", "in_build", "paused"];
+
+function getChannelType(agent: Agent) {
+  if (agent.type === "conversation") return agent.subType === "voice" ? "Voice" : "Chat";
+  if (agent.type === "api") return "API";
+  if (agent.type === "workflow") return "Workflow";
+  return "AOP";
+}
 
 export function AgentsListPage({
   scope,
   onCreateAgent,
+  onOpenAgent,
   initialCreateOpen = false,
   initialAgents = ALL_AGENTS,
   createdNotice,
   onDismissNotice,
 }: Props) {
   const [query, setQuery] = useState("");
-  const [agents, setAgents] = useState<Agent[]>(initialAgents);
+  const [agents, setAgents] = useState<Agent[]>(() =>
+    initialAgents.map((agent) => ({ ...agent, status: "in_build" })),
+  );
   const [trashed, setTrashed] = useState<Array<Agent & { deletedAt: string }>>([
     {
       id: "t1",
       name: "Test Bhupendra multi voice bot",
       type: "conversation",
       subType: "voice",
+      voiceMode: "multi",
       lastModified: "2 months ago",
       lastModifiedAt: "2026-05-14 10:00",
       status: "paused",
@@ -292,6 +312,7 @@ export function AgentsListPage({
       name: "arnav_bot_new",
       type: "conversation",
       subType: "voice",
+      voiceMode: "single",
       lastModified: "1 month ago",
       lastModifiedAt: "2026-06-15 08:00",
       status: "paused",
@@ -329,10 +350,15 @@ export function AgentsListPage({
   const [trashOpen, setTrashOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [typeFilters, setTypeFilters] = useState<Set<AgentTypeKey>>(new Set());
+  const [conversationFilters, setConversationFilters] = useState<Set<ConversationFilter>>(
+    new Set(),
+  );
   const [statusFilters, setStatusFilters] = useState<Set<AgentStatus>>(new Set());
   // Density fixed to compact
   const [sortKey, setSortKey] = useState<SortKey>("modified");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [createOpen, setCreateOpen] = useState(initialCreateOpen);
   const [openPanel, setOpenPanel] = useState<"type" | "status" | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -347,7 +373,15 @@ export function AgentsListPage({
   const filtered = useMemo(() => {
     let list = scopedAgents;
     if (query) list = list.filter((a) => a.name.toLowerCase().includes(query.toLowerCase()));
-    if (typeFilters.size > 0) list = list.filter((a) => typeFilters.has(a.type));
+    if (typeFilters.size > 0 || conversationFilters.size > 0) {
+      list = list.filter((agent) => {
+        if (agent.type !== "conversation") return typeFilters.has(agent.type);
+        return (
+          typeFilters.has("conversation") ||
+          (agent.subType ? conversationFilters.has(agent.subType) : false)
+        );
+      });
+    }
     if (statusFilters.size > 0) list = list.filter((a) => statusFilters.has(a.status));
     const dirMul = sortDir === "asc" ? 1 : -1;
     const sorted = [...list].sort((a, b) => {
@@ -360,6 +394,10 @@ export function AgentsListPage({
         case "type":
           av = TYPE_META[a.type].label;
           bv = TYPE_META[b.type].label;
+          break;
+        case "channel":
+          av = getChannelType(a);
+          bv = getChannelType(b);
           break;
         case "status":
           av = STATUS_META[a.status].label;
@@ -374,12 +412,23 @@ export function AgentsListPage({
       return av < bv ? -1 * dirMul : av > bv ? 1 * dirMul : 0;
     });
     return sorted;
-  }, [scopedAgents, query, typeFilters, statusFilters, sortKey, sortDir]);
+  }, [scopedAgents, query, typeFilters, conversationFilters, statusFilters, sortKey, sortDir]);
 
   const totalUnfiltered = scopedAgents.length;
   const showType = scope === "all";
   const isEmpty = scopedAgents.length === 0 && !query;
-  const hasFilters = typeFilters.size + statusFilters.size > 0;
+  const typeFilterCount = typeFilters.size + conversationFilters.size;
+  const hasFilters = typeFilterCount + statusFilters.size > 0;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const pagedAgents = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, typeFilters, conversationFilters, statusFilters, scope, rowsPerPage]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const typeCounts = useMemo(() => {
     const c: Record<AgentTypeKey, number> = { conversation: 0, workflow: 0, api: 0, multi: 0 };
@@ -388,6 +437,17 @@ export function AgentsListPage({
     });
     return c;
   }, [scopedAgents]);
+  const conversationCounts = useMemo(
+    () => ({
+      voice: scopedAgents.filter(
+        (agent) => agent.type === "conversation" && agent.subType === "voice",
+      ).length,
+      text: scopedAgents.filter(
+        (agent) => agent.type === "conversation" && agent.subType === "text",
+      ).length,
+    }),
+    [scopedAgents],
+  );
   const statusCounts = useMemo(() => {
     const c: Record<AgentStatus, number> = { active: 0, in_build: 0, paused: 0 };
     scopedAgents.forEach((a) => {
@@ -432,6 +492,7 @@ export function AgentsListPage({
 
   const clearFilters = () => {
     setTypeFilters(new Set());
+    setConversationFilters(new Set());
     setStatusFilters(new Set());
   };
 
@@ -499,7 +560,7 @@ export function AgentsListPage({
       if (item) {
         const { deletedAt, ...rest } = item;
         setAgents((a) => [
-          { ...rest, status: "paused" as AgentStatus, lastModified: "just now" },
+          { ...rest, status: "in_build" as AgentStatus, lastModified: "just now" },
           ...a,
         ]);
       }
@@ -509,11 +570,11 @@ export function AgentsListPage({
 
   return (
     <div className="relative h-full w-full">
-      <PageContainer>
+      <PageContainer fullWidth className="flex min-h-full flex-col px-4 pb-4 pt-0 sm:px-5">
         {createdNotice && (
           <div
             role="status"
-            className="mb-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 shadow-sm"
+            className="relative z-20 mt-4 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 shadow-sm"
           >
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100">
               <Check className="h-4 w-4 text-emerald-700" aria-hidden />
@@ -530,29 +591,53 @@ export function AgentsListPage({
           </div>
         )}
 
-        {/* Header */}
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              {SCOPE_TITLES[scope]}
-            </h1>
-            <p className="mt-1.5 max-w-2xl text-[13.5px] leading-relaxed text-muted-foreground">
-              Manage every agent in this workspace — conversations, background workflows and API
-              endpoints — from one place. Filter, edit and monitor status without switching context.
-            </p>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-1">
+          <div className="flex items-center gap-2.5 text-[13px]">
+            <Rows2 className="h-4 w-4 text-muted-foreground" aria-hidden />
+            <span className="font-medium text-foreground">Kapture CX</span>
+            <span className="text-muted-foreground">/</span>
+            <span className="font-medium text-primary">AI Agents</span>
           </div>
+          <span className="flex h-9 w-12 items-center justify-center rounded-full border border-primary/60 bg-card text-primary shadow-sm">
+            <Sparkles className="h-4 w-4" aria-hidden />
+          </span>
         </div>
 
+        <section
+          aria-label={SCOPE_TITLES[scope]}
+          className="relative min-h-[350px] shrink-0 overflow-hidden sm:min-h-[380px]"
+        >
+          <div
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-[50%] bg-cover bg-center bg-no-repeat opacity-70"
+            style={{ backgroundImage: `url(${bgRight})` }}
+          />
+          <div className="relative flex flex-col items-center pt-16 text-center sm:pt-[88px]">
+            <h1 className="text-[22px] font-semibold tracking-[0.01em] text-[#333a50] sm:text-[24px]">
+              Voice + AI – Your Brand&apos;s New Superpower
+            </h1>
+            <div className="mt-12 flex h-[94px] w-[94px] items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_28%,#50434f_0%,#15111c_58%,#5f63d8_100%)] p-[5px] shadow-[0_14px_28px_rgba(69,59,147,0.22)]">
+              <img
+                src={vitosLogo}
+                alt="Vitos AI"
+                className="h-full w-full rounded-full object-cover"
+              />
+            </div>
+          </div>
+        </section>
+
         {isEmpty && scope !== "all" ? (
-          <EmptyState scope={scope as AgentTypeKey} />
+          <div className="relative z-10 -mt-4">
+            <EmptyState scope={scope as AgentTypeKey} />
+          </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="relative z-10 -mt-5 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             {/* Toolbar */}
-            <div className="flex items-center gap-2 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3">
               {/* Search */}
               <div
-                className={`flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5 transition-all duration-150 ${
-                  searchFocused ? "w-[320px] bg-card" : "w-[260px] bg-muted/30"
+                className={`flex h-9 items-center gap-2 rounded-xl border border-border px-3 transition-all duration-150 ${
+                  searchFocused ? "w-[320px] bg-card" : "w-[260px] bg-muted/20"
                 }`}
               >
                 <Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
@@ -561,7 +646,7 @@ export function AgentsListPage({
                   onChange={(e) => setQuery(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
-                  placeholder="Search agents..."
+                  placeholder="Search..."
                   className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
               </div>
@@ -570,30 +655,17 @@ export function AgentsListPage({
 
               {/* Type filter (only when scope=all) */}
               {showType && (
-                <FilterDropdown
-                  label="Type"
+                <AgentTypeFilterDropdown
                   open={openPanel === "type"}
                   setOpen={(o) => setOpenPanel(o ? "type" : null)}
-                  count={typeFilters.size}
-                >
-                  {TYPE_OPTIONS.map((t) => {
-                    const checked = typeFilters.has(t);
-                    return (
-                      <ChecklistRow
-                        key={t}
-                        checked={checked}
-                        onToggle={() => {
-                          const n = new Set(typeFilters);
-                          if (checked) n.delete(t);
-                          else n.add(t);
-                          setTypeFilters(n);
-                        }}
-                        label={TYPE_META[t].label}
-                        rightCount={typeCounts[t]}
-                      />
-                    );
-                  })}
-                </FilterDropdown>
+                  count={typeFilterCount}
+                  typeFilters={typeFilters}
+                  conversationFilters={conversationFilters}
+                  typeCounts={typeCounts}
+                  conversationCounts={conversationCounts}
+                  setTypeFilters={setTypeFilters}
+                  setConversationFilters={setConversationFilters}
+                />
               )}
 
               {/* Status filter */}
@@ -641,19 +713,24 @@ export function AgentsListPage({
                 onClick={() => setTrashOpen(true)}
                 aria-label="Trash"
                 title="Trash"
-                className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-rose-50 hover:text-rose-600"
+                className="inline-flex h-9 w-11 items-center justify-center rounded-lg border border-border bg-background text-rose-500 transition hover:bg-rose-50 hover:text-rose-600"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
-              <button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground transition hover:bg-hover">
-                <Upload className="h-3.5 w-3.5" /> Import bot
+              <button
+                type="button"
+                aria-label="Import agents"
+                title="Import agents"
+                className="inline-flex h-9 w-11 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-hover hover:text-foreground"
+              >
+                <Upload className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground shadow-sm transition hover:opacity-90"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-sm transition hover:opacity-90"
               >
-                <Plus className="h-3.5 w-3.5" /> Create new
+                <Plus className="h-3.5 w-3.5" /> Create New
               </button>
             </div>
 
@@ -671,6 +748,17 @@ export function AgentsListPage({
                     }}
                   />
                 ))}
+                {[...conversationFilters].map((filter) => (
+                  <FilterChip
+                    key={`conversation-${filter}`}
+                    label={filter === "voice" ? "Voice" : "Chat"}
+                    onRemove={() => {
+                      const next = new Set(conversationFilters);
+                      next.delete(filter);
+                      setConversationFilters(next);
+                    }}
+                  />
+                ))}
                 {[...statusFilters].map((s) => (
                   <FilterChip
                     key={`s-${s}`}
@@ -685,147 +773,164 @@ export function AgentsListPage({
               </div>
             )}
 
-            {/* Table header */}
-            <div
-              className={`grid items-center gap-4 border-y border-border bg-muted/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground ${
-                showType
-                  ? "grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_160px_140px_140px]"
-                  : "grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_160px_140px_140px]"
-              }`}
-            >
-              <SortHeader
-                label="Name"
-                active={sortKey === "name"}
-                dir={sortDir}
-                onClick={() => onSort("name")}
-              />
-              <SortHeader
-                label="Type"
-                active={sortKey === "type"}
-                dir={sortDir}
-                onClick={() => onSort("type")}
-              />
-              <SortHeader
-                label="Last modified"
-                active={sortKey === "modified"}
-                dir={sortDir}
-                onClick={() => onSort("modified")}
-              />
-              <SortHeader
-                label="Status"
-                active={sortKey === "status"}
-                dir={sortDir}
-                onClick={() => onSort("status")}
-              />
-              <span className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Action
-              </span>
+            <div className="overflow-x-auto">
+              <div className="min-w-[1040px]">
+                {/* Table header */}
+                <div className="grid grid-cols-[minmax(250px,1.35fr)_minmax(230px,1.15fr)_150px_150px_120px_64px] items-center gap-4 border-y border-border bg-muted/30 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <SortHeader
+                    label="Name"
+                    active={sortKey === "name"}
+                    dir={sortDir}
+                    onClick={() => onSort("name")}
+                  />
+                  <SortHeader
+                    label="Type"
+                    active={sortKey === "type"}
+                    dir={sortDir}
+                    onClick={() => onSort("type")}
+                  />
+                  <SortHeader
+                    label="Channel Type"
+                    active={sortKey === "channel"}
+                    dir={sortDir}
+                    onClick={() => onSort("channel")}
+                  />
+                  <SortHeader
+                    label="Last modified"
+                    active={sortKey === "modified"}
+                    dir={sortDir}
+                    onClick={() => onSort("modified")}
+                  />
+                  <SortHeader
+                    label="Status"
+                    active={sortKey === "status"}
+                    dir={sortDir}
+                    onClick={() => onSort("status")}
+                  />
+                  <span className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Action
+                  </span>
+                </div>
+
+                {/* Rows */}
+                <div className="max-h-[360px] overflow-y-auto">
+                  {filtered.length === 0 ? (
+                    <div className="px-4 py-16 text-center text-sm text-muted-foreground">
+                      No results{query ? ` for "${query}"` : ""}
+                    </div>
+                  ) : (
+                    pagedAgents.map((agent) => {
+                      const meta = TYPE_META[agent.type];
+                      const isVoiceAgent =
+                        agent.type === "conversation" && agent.subType === "voice";
+                      const visualMeta = isVoiceAgent
+                        ? { ...meta, bg: "#FCE7EF", text: "#B22257", Icon: Phone }
+                        : meta;
+                      const status = STATUS_META[agent.status];
+                      const Icon = visualMeta.Icon;
+                      const opensBuilder =
+                        (agent.type === "conversation" || agent.type === "workflow") && onOpenAgent;
+                      return (
+                        <div
+                          key={agent.id}
+                          role={opensBuilder ? "button" : undefined}
+                          tabIndex={opensBuilder ? 0 : undefined}
+                          aria-label={opensBuilder ? `Open ${agent.name} builder` : undefined}
+                          onClick={() => opensBuilder && onOpenAgent?.(agent)}
+                          onKeyDown={(event) => {
+                            if (!opensBuilder || (event.key !== "Enter" && event.key !== " "))
+                              return;
+                            event.preventDefault();
+                            onOpenAgent?.(agent);
+                          }}
+                          className={cn(
+                            "group grid grid-cols-[minmax(250px,1.35fr)_minmax(230px,1.15fr)_150px_150px_120px_64px] items-center gap-4 border-b border-border/70 px-4 py-2 transition last:border-b-0 hover:bg-hover",
+                            opensBuilder &&
+                              "cursor-pointer focus:outline-none focus-visible:bg-[#FDF3F7] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#B22257]/30",
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                              style={{ backgroundColor: visualMeta.bg, color: visualMeta.text }}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="truncate text-[13px] font-medium text-foreground">
+                              {agent.name}
+                            </span>
+                          </div>
+
+                          <div className="min-w-0">
+                            <span
+                              className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-medium"
+                              style={{ backgroundColor: visualMeta.bg, color: visualMeta.text }}
+                            >
+                              <Icon className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{meta.label}</span>
+                              {agent.type === "conversation" && agent.subType && (
+                                <span className="border-l border-current/20 pl-1.5 opacity-90">
+                                  {agent.subType === "voice"
+                                    ? `${agent.voiceMode === "multi" ? "Multi" : "Single"} Voice`
+                                    : "Non-Voice"}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+
+                          <span className="truncate text-[13px] text-foreground">
+                            {getChannelType(agent)}
+                          </span>
+
+                          <span className="truncate text-[13px] text-foreground">
+                            {agent.lastModified}
+                          </span>
+
+                          <div>
+                            <span
+                              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium"
+                              style={{ backgroundColor: status.bg, color: status.text }}
+                            >
+                              <span
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{ backgroundColor: status.dot }}
+                              />
+                              {status.label}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-center">
+                            <ActionIconBtn
+                              label="Delete"
+                              destructive
+                              onClick={() => setConfirmDelete({ ids: [agent.id] })}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </ActionIconBtn>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Rows */}
-            {filtered.length === 0 ? (
-              <div className="px-4 py-16 text-center text-sm text-muted-foreground">
-                No results{query ? ` for "${query}"` : ""}
-              </div>
-            ) : (
-              filtered.map((agent) => {
-                const meta = TYPE_META[agent.type];
-                const status = STATUS_META[agent.status];
-                const Icon = meta.Icon;
-                const rowPad = "py-1.5";
-                const iconSize = "h-6 w-6";
-                return (
-                  <div
-                    key={agent.id}
-                    className={`group grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_160px_140px_140px] items-center gap-4 border-b border-border/60 px-4 transition last:border-b-0 hover:bg-hover ${rowPad}`}
-                  >
-                    {/* Name */}
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div
-                        className={`flex ${iconSize} shrink-0 items-center justify-center rounded-md`}
-                        style={{ backgroundColor: meta.bg, color: meta.text }}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </div>
-                      <span className="truncate text-[13.5px] font-medium text-foreground">
-                        {agent.name}
-                      </span>
-                    </div>
-
-                    {/* Type */}
-                    <div className="min-w-0">
-                      <span
-                        className="inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-medium"
-                        style={{ backgroundColor: meta.bg, color: meta.text }}
-                      >
-                        <Icon className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{meta.label}</span>
-                        {agent.type === "conversation" && agent.subType && (
-                          <SubTypeInline subType={agent.subType} />
-                        )}
-                      </span>
-                    </div>
-
-                    {/* Last modified */}
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] text-foreground">
-                        {agent.lastModified}
-                      </div>
-                      <div className="truncate font-mono text-[10.5px] text-muted-foreground">
-                        {agent.lastModifiedAt}
-                      </div>
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium"
-                        style={{ backgroundColor: status.bg, color: status.text }}
-                      >
-                        <span className="relative flex h-1.5 w-1.5">
-                          {agent.status === "in_build" && (
-                            <span
-                              className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-                              style={{ backgroundColor: status.dot }}
-                            />
-                          )}
-                          <span
-                            className="relative inline-flex h-1.5 w-1.5 rounded-full"
-                            style={{ backgroundColor: status.dot }}
-                          />
-                        </span>
-                        {status.label}
-                      </span>
-                    </div>
-
-                    {/* Row actions */}
-                    <div className="flex items-center justify-end gap-1.5">
-                      <ActionIconBtn label="Clone" onClick={() => cloneAgent(agent.id)}>
-                        <Copy className="h-3.5 w-3.5" />
-                      </ActionIconBtn>
-                      <ActionIconBtn label="Export" onClick={() => exportAgent(agent.id)}>
-                        <Download className="h-3.5 w-3.5" />
-                      </ActionIconBtn>
-                      <ActionIconBtn
-                        label="Delete"
-                        destructive
-                        onClick={() => setConfirmDelete({ ids: [agent.id] })}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </ActionIconBtn>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
             {/* Footer */}
-            <div className="flex items-center justify-between border-t border-border bg-muted/20 px-4 py-2.5 text-[12px] text-muted-foreground">
-              <span>
-                Showing <span className="font-medium text-foreground">{filtered.length}</span> of{" "}
-                <span className="font-medium text-foreground">{totalUnfiltered}</span> agents
-              </span>
-              <Pagination />
+            <div className="flex items-center justify-between border-t border-border bg-card px-2 py-2 text-[12px] text-foreground sm:px-4">
+              <label className="flex items-center gap-2">
+                <span>Rows per page</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(event) => setRowsPerPage(Number(event.target.value))}
+                  className="h-8 rounded-lg border border-border bg-card px-2 text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                </select>
+              </label>
+              <Pagination page={page} total={totalPages} onPageChange={setPage} />
             </div>
           </div>
         )}
@@ -856,6 +961,241 @@ export function AgentsListPage({
 }
 
 /* ---------- Toolbar helpers ---------- */
+
+function AgentTypeFilterDropdown({
+  open,
+  setOpen,
+  count,
+  typeFilters,
+  conversationFilters,
+  typeCounts,
+  conversationCounts,
+  setTypeFilters,
+  setConversationFilters,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  count: number;
+  typeFilters: Set<AgentTypeKey>;
+  conversationFilters: Set<ConversationFilter>;
+  typeCounts: Record<AgentTypeKey, number>;
+  conversationCounts: Record<ConversationFilter, number>;
+  setTypeFilters: React.Dispatch<React.SetStateAction<Set<AgentTypeKey>>>;
+  setConversationFilters: React.Dispatch<React.SetStateAction<Set<ConversationFilter>>>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const conversationSelected = typeFilters.has("conversation");
+  const selectedConversationChildren = conversationFilters.size;
+  const allConversationChildrenSelected = selectedConversationChildren === 2;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, setOpen]);
+
+  const toggleTopLevel = (type: AgentTypeKey) => {
+    if (type === "conversation") {
+      if (conversationSelected || selectedConversationChildren > 0) {
+        setTypeFilters((current) => {
+          const next = new Set(current);
+          next.delete("conversation");
+          return next;
+        });
+        setConversationFilters(new Set());
+      } else {
+        setTypeFilters((current) => new Set(current).add("conversation"));
+      }
+      return;
+    }
+
+    setTypeFilters((current) => {
+      const next = new Set(current);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  const toggleConversationFilter = (filter: ConversationFilter) => {
+    setTypeFilters((current) => {
+      const next = new Set(current);
+      next.delete("conversation");
+      return next;
+    });
+    setConversationFilters((current) => {
+      const next = new Set(current);
+      if (next.has(filter)) next.delete(filter);
+      else next.add(filter);
+      return next;
+    });
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={cn(
+          "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium transition",
+          count > 0
+            ? "border-primary/40 bg-primary/10 text-primary"
+            : "border-border bg-background text-foreground hover:bg-hover",
+        )}
+      >
+        Type
+        {count > 0 && (
+          <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[10px] font-semibold text-primary-foreground">
+            {count}
+          </span>
+        )}
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label="Filter agents by type"
+          className="absolute left-0 top-full z-50 mt-2 w-[300px] overflow-hidden rounded-xl border border-border bg-card shadow-[0_16px_40px_rgba(22,24,35,0.16)]"
+        >
+          <div className="border-b border-border bg-muted/20 px-3 py-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              Agent type
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Select a type or narrow conversation agents by channel.
+            </p>
+          </div>
+          <div className="max-h-[360px] overflow-y-auto p-1.5">
+            <TreeFilterRow
+              label="Conversation Agent"
+              count={typeCounts.conversation}
+              checked={conversationSelected || allConversationChildrenSelected}
+              indeterminate={
+                !conversationSelected &&
+                selectedConversationChildren > 0 &&
+                !allConversationChildrenSelected
+              }
+              icon={<MessageCircle className="h-3.5 w-3.5" />}
+              onToggle={() => toggleTopLevel("conversation")}
+            />
+
+            <div className="relative ml-4 border-l border-dashed border-border pl-3">
+              <TreeFilterRow
+                label="Voice"
+                count={conversationCounts.voice}
+                checked={conversationSelected || conversationFilters.has("voice")}
+                icon={<Phone className="h-3.5 w-3.5" />}
+                onToggle={() => toggleConversationFilter("voice")}
+                nested
+              />
+              <TreeFilterRow
+                label="Non-Voice"
+                count={conversationCounts.text}
+                checked={conversationSelected || conversationFilters.has("text")}
+                icon={<MessageSquare className="h-3.5 w-3.5" />}
+                onToggle={() => toggleConversationFilter("text")}
+                nested
+              />
+              <div className="relative ml-4 border-l border-dashed border-border pl-3">
+                <TreeFilterRow
+                  label="Chat"
+                  count={conversationCounts.text}
+                  checked={conversationSelected || conversationFilters.has("text")}
+                  icon={<MessageCircle className="h-3.5 w-3.5" />}
+                  onToggle={() => toggleConversationFilter("text")}
+                  nested
+                />
+              </div>
+            </div>
+
+            <div className="my-1.5 border-t border-border" />
+            <TreeFilterRow
+              label="Work Agent"
+              count={typeCounts.workflow}
+              checked={typeFilters.has("workflow")}
+              icon={<Cpu className="h-3.5 w-3.5" />}
+              onToggle={() => toggleTopLevel("workflow")}
+            />
+            <TreeFilterRow
+              label="Agent as API"
+              count={typeCounts.api}
+              checked={typeFilters.has("api")}
+              icon={<Plug className="h-3.5 w-3.5" />}
+              onToggle={() => toggleTopLevel("api")}
+            />
+            {typeCounts.multi > 0 && (
+              <TreeFilterRow
+                label="Multi-agent"
+                count={typeCounts.multi}
+                checked={typeFilters.has("multi")}
+                icon={<Network className="h-3.5 w-3.5" />}
+                onToggle={() => toggleTopLevel("multi")}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TreeFilterRow({
+  label,
+  count,
+  checked,
+  indeterminate = false,
+  icon,
+  onToggle,
+  nested = false,
+}: {
+  label: string;
+  count: number;
+  checked: boolean;
+  indeterminate?: boolean;
+  icon: React.ReactNode;
+  onToggle: () => void;
+  nested?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={indeterminate ? "mixed" : checked}
+      onClick={onToggle}
+      className={cn(
+        "group relative flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-muted/55",
+        nested &&
+          "before:absolute before:-left-3 before:top-1/2 before:w-3 before:border-t before:border-dashed before:border-border",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
+          checked || indeterminate
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-border bg-card group-hover:border-primary/50",
+        )}
+      >
+        {indeterminate ? (
+          <span className="h-0.5 w-2 rounded-full bg-primary-foreground" />
+        ) : checked ? (
+          <Check className="h-3 w-3" strokeWidth={3} />
+        ) : null}
+      </span>
+      <span className="text-muted-foreground">{icon}</span>
+      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
+        {label}
+      </span>
+      <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">{count}</span>
+    </button>
+  );
+}
 
 function FilterDropdown({
   label,
@@ -1140,39 +1480,32 @@ function MenuItem({
   );
 }
 
-function Pagination() {
-  const [page, setPage] = useState(1);
-  const total = 12;
-  const pages = [1, 2, 3];
+function Pagination({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="mr-2 text-muted-foreground">
+      <span className="mr-2 text-foreground">
         Page {page} of {total}
       </span>
-      <PageBtn onClick={() => setPage((p) => Math.max(1, p - 1))} aria-label="Previous">
+      <PageBtn
+        onClick={() => onPageChange(Math.max(1, page - 1))}
+        aria-label="Previous"
+        disabled={page === 1}
+      >
         <ChevronLeft className="h-4 w-4" />
       </PageBtn>
-      {pages.map((p) => (
-        <button
-          key={p}
-          onClick={() => setPage(p)}
-          className={`h-8 min-w-8 rounded-md px-2 text-sm font-medium transition ${
-            page === p
-              ? "bg-primary text-primary-foreground"
-              : "border border-border bg-card text-foreground hover:bg-hover"
-          }`}
-        >
-          {p}
-        </button>
-      ))}
-      <span className="px-1 text-muted-foreground">…</span>
-      <button
-        onClick={() => setPage(total)}
-        className="h-8 min-w-8 rounded-md border border-border bg-card px-2 text-sm font-medium text-foreground hover:bg-hover"
+      <PageBtn
+        onClick={() => onPageChange(Math.min(total, page + 1))}
+        aria-label="Next"
+        disabled={page === total}
       >
-        {total}
-      </button>
-      <PageBtn onClick={() => setPage((p) => Math.min(total, p + 1))} aria-label="Next">
         <ChevronRight className="h-4 w-4" />
       </PageBtn>
     </div>
@@ -1184,7 +1517,7 @@ function PageBtn({ children, onClick, ...rest }: React.ButtonHTMLAttributes<HTML
     <button
       onClick={onClick}
       {...rest}
-      className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition hover:bg-hover hover:text-foreground"
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition hover:bg-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card"
     >
       {children}
     </button>

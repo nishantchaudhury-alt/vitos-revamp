@@ -637,6 +637,10 @@ function ChannelBadge({ channelId }: { channelId: string }) {
       icon: <Instagram className="h-5 w-5 text-white" strokeWidth={2.2} />,
     },
     twilio: { bg: "#F22F46", icon: <Phone className="h-5 w-5 text-white" strokeWidth={2.2} /> },
+    chat: {
+      bg: "#B22257",
+      icon: <MessageCircle className="h-5 w-5 text-white" strokeWidth={2.2} />,
+    },
     website: { bg: "#B22257", icon: <Globe className="h-5 w-5 text-white" strokeWidth={2.2} /> },
     email: { bg: "#0055CC", icon: <Mail className="h-5 w-5 text-white" strokeWidth={2.2} /> },
   };
