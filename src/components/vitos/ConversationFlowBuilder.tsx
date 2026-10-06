@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -19,6 +19,7 @@ import "@xyflow/react/dist/style.css";
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
   Bot,
   Box,
   Bug,
@@ -43,6 +44,7 @@ import {
   Play,
   Plus,
   Redo2,
+  RefreshCw,
   Rocket,
   Save,
   SlidersHorizontal,
@@ -98,6 +100,7 @@ type ConversationNodeData = {
   sourceHandles?: Array<{ id: string; top: string }>;
   footerLeft?: string;
   footerRight?: string;
+  channelType?: string;
 };
 
 const TONE_STYLES: Record<NodeTone, { icon: string; border: string; handle: string }> = {
@@ -213,10 +216,19 @@ function FlowNodeCard({ data, selected }: NodeProps) {
           <div className="truncate text-[10.5px] font-semibold text-foreground">{node.label}</div>
         </div>
       </div>
-      {node.detail && (
-        <div className="truncate px-2.5 py-2 font-mono text-[9px] italic text-muted-foreground">
-          {node.detail}
+      {node.kind === "trigger" && node.channelType ? (
+        <div className="px-2.5 py-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-semibold text-blue-600">
+            <Globe2 className="h-2.5 w-2.5" aria-hidden="true" />
+            {node.channelType}
+          </span>
         </div>
+      ) : (
+        node.detail && (
+          <div className="truncate px-2.5 py-2 font-mono text-[9px] italic text-muted-foreground">
+            {node.detail}
+          </div>
+        )
       )}
       <Handle
         type="source"
@@ -350,7 +362,13 @@ const initialNodes: Node<ConversationNodeData>[] = [
     id: "trigger",
     type: "conversation",
     position: { x: 0, y: 260 },
-    data: { label: "Trigger", tone: "green", kind: "trigger", compact: true },
+    data: {
+      label: "Trigger",
+      tone: "green",
+      kind: "trigger",
+      compact: true,
+      channelType: "Website",
+    },
   },
   {
     id: "welcome",
@@ -697,7 +715,13 @@ const workAgentNodes: Node<ConversationNodeData>[] = [
     id: "work-trigger",
     type: "conversation",
     position: { x: 0, y: 330 },
-    data: { label: "Trigger", detail: "Trigger", tone: "green", kind: "trigger", compact: true },
+    data: {
+      label: "Trigger",
+      tone: "green",
+      kind: "trigger",
+      compact: true,
+      channelType: "Website",
+    },
   },
   {
     id: "work-send-message",
@@ -1202,6 +1226,196 @@ function SendMessageConfigPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+function TriggerConfigPanel({ onClose }: { onClose: () => void }) {
+  const [channelType, setChannelType] = useState("Website");
+  const [channel, setChannel] = useState("kaptureqa · autoqa.com");
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [defaultChannelOpen, setDefaultChannelOpen] = useState(true);
+  const [responseOpen, setResponseOpen] = useState(false);
+
+  return (
+    <aside
+      aria-label="Trigger configuration"
+      className="absolute inset-y-0 right-0 z-40 flex w-full max-w-[430px] flex-col border-l border-border bg-card shadow-[-12px_0_32px_rgba(15,23,42,0.12)] sm:w-[430px]"
+    >
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+          <Zap className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <h2 className="flex-1 text-[15px] font-semibold text-foreground">Trigger</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close Trigger configuration"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-hover hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid h-11 shrink-0 grid-cols-3 border-b border-border bg-muted/15 px-3">
+        <button
+          type="button"
+          className="border-b-2 border-emerald-500 text-[12px] font-semibold text-emerald-600"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Setup
+          </span>
+        </button>
+        <button type="button" className="text-[12px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Code2 className="h-3.5 w-3.5" /> Output
+          </span>
+        </button>
+        <button type="button" className="text-[12px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" /> About
+          </span>
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#FAFBFF] p-3 [scrollbar-color:#D9DFEB_transparent]">
+        <section className="rounded-xl border border-emerald-100 bg-white px-3 py-3 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setSummaryOpen((value) => !value)}
+            className="flex w-full items-center gap-2"
+          >
+            <span className="h-5 border-l-2 border-emerald-500" aria-hidden="true" />
+            <h3 className="text-[13px] font-semibold text-[#333A50]">Summary</h3>
+            <span className="flex-1 truncate text-left text-[11px] text-muted-foreground">
+              Starts the flow when an event occurs
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                summaryOpen && "rotate-180",
+              )}
+            />
+          </button>
+        </section>
+
+        <section className="mt-3 rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setDefaultChannelOpen((value) => !value)}
+            className="flex w-full items-center gap-2 border-b border-border pb-3"
+          >
+            <span className="h-5 border-l-2 border-emerald-500" aria-hidden="true" />
+            <h3 className="flex-1 text-left text-[13px] font-semibold text-[#333A50]">
+              Default Channel
+            </h3>
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+              Optional
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                defaultChannelOpen && "rotate-180",
+              )}
+            />
+          </button>
+
+          {defaultChannelOpen && (
+            <>
+              <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+                Channel Type
+                <select
+                  value={channelType}
+                  onChange={(event) => {
+                    const nextChannelType = event.target.value;
+                    setChannelType(nextChannelType);
+                    setChannel(
+                      nextChannelType === "Website" ? "kaptureqa · autoqa.com" : "123456789",
+                    );
+                  }}
+                  className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-[12px] font-normal text-foreground outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                >
+                  <option>WhatsApp</option>
+                  <option>Website</option>
+                  <option>Chat</option>
+                  <option>SMS</option>
+                </select>
+              </label>
+
+              <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+                Channel
+                <select
+                  value={channel}
+                  onChange={(event) => setChannel(event.target.value)}
+                  className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-[12px] font-normal text-foreground outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                >
+                  {channelType === "Website" ? (
+                    <>
+                      <option>kaptureqa · autoqa.com</option>
+                      <option>Website qa · www.abc.com</option>
+                      <option>newqa · autoqa.com</option>
+                    </>
+                  ) : (
+                    <>
+                      <option>123456789</option>
+                      <option>Default {channelType} configuration</option>
+                    </>
+                  )}
+                </select>
+              </label>
+              <p className="mt-1 text-[10px] text-muted-foreground">Resolves to {channelType}</p>
+            </>
+          )}
+        </section>
+
+        <section className="mt-3 rounded-xl border border-emerald-100 bg-white px-3 py-3 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setResponseOpen((value) => !value)}
+            className="flex w-full items-center gap-2"
+          >
+            <span className="h-5 border-l-2 border-emerald-500" aria-hidden="true" />
+            <h3 className="flex-1 text-left text-[13px] font-semibold text-[#333A50]">
+              Response &amp; Event Data
+            </h3>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                responseOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {responseOpen && (
+            <p className="mt-2 pl-3 text-[11px] leading-5 text-muted-foreground">
+              Define what gets passed downstream when this trigger fires.
+            </p>
+          )}
+        </section>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-700 px-4 text-[12px] font-semibold text-white shadow-sm transition hover:bg-emerald-800"
+          >
+            Save
+          </button>
+        </div>
+
+        <div className="mt-4">
+          <span className="text-[12px] font-medium text-foreground">Additional Settings</span>
+          <div className="mt-1.5 h-11 w-full rounded-lg border border-border bg-white" />
+        </div>
+      </div>
+
+      <div className="flex h-10 shrink-0 items-center justify-between border-t border-border px-4">
+        <span className="text-[11px] text-muted-foreground">v{FLOW_VERSION}</span>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#C72B65] px-2.5 py-1 text-[10px] font-semibold text-white">
+            <RefreshCw className="h-3 w-3" /> Latest Version
+          </span>
+          <Bell className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 function BuilderInner({
   agent,
   workspaceName,
@@ -1240,11 +1454,16 @@ function BuilderInner({
 
   const onNodeClick = useCallback(
     (_: unknown, node: Node) => {
+      const data = node.data as ConversationNodeData;
+      const hasPanel = node.id === "work-send-message" || data.kind === "trigger";
       setNodes((current) => current.map((item) => ({ ...item, selected: item.id === node.id })));
-      setSelectedNodeId(node.id === "work-send-message" ? node.id : null);
+      setSelectedNodeId(hasPanel ? node.id : null);
     },
     [setNodes],
   );
+
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId);
+  const selectedNodeData = selectedNode?.data as ConversationNodeData | undefined;
 
   const breadcrumbWorkspace = workspaceName || "Kapture CX";
 
@@ -1313,17 +1532,15 @@ function BuilderInner({
                 <Save className="h-4 w-4" />
               )}
             </button>
-            {!isWorkAgent && (
-              <button
-                type="button"
-                aria-label="Deploy agent"
-                title="Deploy"
-                onClick={() => setShowDeploymentSettings(true)}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
-              >
-                <Rocket className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              aria-label="Deploy agent"
+              title="Deploy"
+              onClick={() => setShowDeploymentSettings(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
+            >
+              <Rocket className="h-4 w-4" />
+            </button>
           </div>
 
           <ReactFlow
@@ -1381,6 +1598,19 @@ function BuilderInner({
                 setNodes((current) =>
                   current.map((node) =>
                     node.id === "work-send-message" ? { ...node, selected: false } : node,
+                  ),
+                );
+              }}
+            />
+          )}
+
+          {selectedNodeId && selectedNodeData?.kind === "trigger" && (
+            <TriggerConfigPanel
+              onClose={() => {
+                setSelectedNodeId(null);
+                setNodes((current) =>
+                  current.map((node) =>
+                    node.id === selectedNodeId ? { ...node, selected: false } : node,
                   ),
                 );
               }}
@@ -1874,6 +2104,13 @@ function WebsiteDeploymentSettings({
 
   const selected = websiteConfigurations.find((website) => website.id === selectedWebsite);
 
+  useEffect(() => {
+    if (agent.type === "workflow" && websiteConfigurations.length > 0) {
+      const firstWebsite = websiteConfigurations[0];
+      onNext(firstWebsite);
+    }
+  }, []);
+
   const closeCreatePanel = () => {
     setIsCreateOpen(false);
     setWebsiteName("");
@@ -2121,6 +2358,8 @@ function WebsiteDeploymentSettings({
     </main>
   );
 }
+
+export const FLOW_VERSION = "1.5.4";
 
 export function ConversationFlowBuilder(props: {
   agent: Agent;

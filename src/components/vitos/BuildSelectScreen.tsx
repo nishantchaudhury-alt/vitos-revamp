@@ -48,7 +48,7 @@ import bgRight from "@/assets/vitos-bg-right.png";
 import integrationsHeroBg from "@/assets/integrations-hero-bg.webp";
 import { HomeOverview } from "./HomeOverview";
 import { AgentsListPage, ALL_AGENTS, type Agent, type AgentTypeKey } from "./AgentsListPage";
-import { ConversationFlowBuilder } from "./ConversationFlowBuilder";
+import { ConversationFlowBuilder, FLOW_VERSION } from "./ConversationFlowBuilder";
 import { AgentTypeSelect, type AgentType } from "./AgentTypeSelect";
 import { IndustrySelect } from "./IndustrySelect";
 import { NameAgentScreen } from "./NameAgentScreen";
@@ -232,6 +232,7 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
   const [deploymentWebsiteTarget, setDeploymentWebsiteTarget] = useState<{
     name: string;
     domain: string;
+    workflow?: { id: string; name: string; version: string };
   } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -686,7 +687,14 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
                 setView("channels");
               }}
               onWebsiteSelected={(website) => {
-                setDeploymentWebsiteTarget(website);
+                setDeploymentWebsiteTarget({
+                  ...website,
+                  workflow: {
+                    id: activeAgentBuilder.id,
+                    name: activeAgentBuilder.name,
+                    version: FLOW_VERSION,
+                  },
+                });
                 setActiveAgentBuilder(null);
                 setActiveAgentKey(null);
                 setCollapsed(false);
@@ -814,6 +822,9 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
             <ProvidersPage />
           ) : view === "channels" ? (
             <ChannelsPage
+              workflowAgents={[...createdAgents, ...ALL_AGENTS].filter(
+                (agent) => agent.type === "workflow",
+              )}
               initialWebsite={deploymentWebsiteTarget}
               onInitialWebsiteConsumed={() => setDeploymentWebsiteTarget(null)}
               onViewWorkflow={(workflow) => {

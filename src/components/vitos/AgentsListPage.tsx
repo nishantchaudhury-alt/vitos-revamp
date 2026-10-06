@@ -63,7 +63,7 @@ interface Props {
 
 /* ---------- Meta ---------- */
 
-const TYPE_META: Record<
+export const TYPE_META: Record<
   AgentTypeKey,
   { label: string; bg: string; text: string; Icon: React.ComponentType<{ className?: string }> }
 > = {
@@ -73,7 +73,10 @@ const TYPE_META: Record<
   multi: { label: "Multi-agent", bg: "#EEEDFE", text: "#534AB7", Icon: Network },
 };
 
-const STATUS_META: Record<AgentStatus, { label: string; dot: string; bg: string; text: string }> = {
+export const STATUS_META: Record<
+  AgentStatus,
+  { label: string; dot: string; bg: string; text: string }
+> = {
   in_build: { label: "In build", dot: "#E9A400", bg: "#FFF8E1", text: "#8C5A00" },
   active: { label: "Active", dot: "#3B8F3B", bg: "#EAF3DE", text: "#3B6D11" },
   paused: { label: "Paused", dot: "#8A8A8A", bg: "#F1EFE8", text: "#5F5E5A" },
@@ -93,9 +96,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "1",
     name: "sibi_local_testing",
-    type: "conversation",
-    subType: "voice",
-    voiceMode: "single",
+    type: "workflow",
     lastModified: "11 hours ago",
     lastModifiedAt: "2026-07-14 03:12",
     status: "in_build",
@@ -112,7 +113,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "4",
     name: "test_keys",
-    type: "api",
+    type: "workflow",
     lastModified: "4 days ago",
     lastModifiedAt: "2026-07-10 09:44",
     status: "in_build",
@@ -154,7 +155,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "9",
     name: "crm_sync_api",
-    type: "api",
+    type: "workflow",
     lastModified: "6 days ago",
     lastModifiedAt: "2026-07-08 12:48",
     status: "in_build",
@@ -162,9 +163,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "10",
     name: "inbound_support_line",
-    type: "conversation",
-    subType: "voice",
-    voiceMode: "single",
+    type: "workflow",
     lastModified: "1 day ago",
     lastModifiedAt: "2026-07-13 22:10",
     status: "in_build",
@@ -172,9 +171,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "11",
     name: "appointment_reminder_calls",
-    type: "conversation",
-    subType: "voice",
-    voiceMode: "multi",
+    type: "workflow",
     lastModified: "4 hours ago",
     lastModifiedAt: "2026-07-14 10:02",
     status: "in_build",
@@ -182,8 +179,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "12",
     name: "whatsapp_order_bot",
-    type: "conversation",
-    subType: "text",
+    type: "workflow",
     lastModified: "2 days ago",
     lastModifiedAt: "2026-07-12 19:33",
     status: "in_build",
@@ -191,8 +187,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "13",
     name: "email_triage_assistant",
-    type: "conversation",
-    subType: "text",
+    type: "workflow",
     lastModified: "6 days ago",
     lastModifiedAt: "2026-07-08 07:29",
     status: "in_build",
@@ -200,8 +195,7 @@ export const ALL_AGENTS: Agent[] = [
   {
     id: "14",
     name: "web_chat_concierge",
-    type: "conversation",
-    subType: "text",
+    type: "workflow",
     lastModified: "9 hours ago",
     lastModifiedAt: "2026-07-14 05:11",
     status: "in_build",
@@ -238,7 +232,7 @@ type ConversationFilter = ConversationSubType;
 
 const STATUS_OPTIONS: AgentStatus[] = ["active", "in_build", "paused"];
 
-function getChannelType(agent: Agent) {
+export function getChannelType(agent: Agent) {
   if (agent.type === "conversation") return agent.subType === "voice" ? "Voice" : "Chat";
   if (agent.type === "api") return "API";
   if (agent.type === "workflow") return "Workflow";
