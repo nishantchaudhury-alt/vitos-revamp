@@ -232,6 +232,8 @@ export function BuildSelectScreen({ workspaceName, onLogout }: Props) {
   const [deploymentWebsiteTarget, setDeploymentWebsiteTarget] = useState<{
     name: string;
     domain: string;
+    logoUrl?: string;
+    logoName?: string;
     workflow?: { id: string; name: string; version: string };
   } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);

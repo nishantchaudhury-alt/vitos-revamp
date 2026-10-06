@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -53,7 +53,6 @@ import {
   TriangleAlert,
   Undo2,
   Unplug,
-  Upload,
   Webhook,
   Workflow,
   X,
@@ -62,6 +61,7 @@ import {
 import { cn } from "@/lib/utils";
 import vitosLogo from "@/assets/vitos-logo.png";
 import type { Agent } from "./AgentsListPage";
+import { WebsiteConfigPanel } from "./WebsiteConfigPanel";
 
 type NodeTone = "green" | "blue" | "amber" | "violet" | "pink" | "slate";
 type NodeKind =
@@ -1338,28 +1338,24 @@ function TriggerConfigPanel({ onClose }: { onClose: () => void }) {
                 </select>
               </label>
 
-              <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
-                Channel
-                <select
-                  value={channel}
-                  onChange={(event) => setChannel(event.target.value)}
-                  className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-[12px] font-normal text-foreground outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-                >
-                  {channelType === "Website" ? (
-                    <>
-                      <option>kaptureqa · autoqa.com</option>
-                      <option>Website qa · www.abc.com</option>
-                      <option>newqa · autoqa.com</option>
-                    </>
-                  ) : (
-                    <>
+              {channelType !== "Website" && (
+                <>
+                  <label className="mt-3 block text-[12px] font-semibold text-[#333A50]">
+                    Channel
+                    <select
+                      value={channel}
+                      onChange={(event) => setChannel(event.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-[12px] font-normal text-foreground outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                    >
                       <option>123456789</option>
                       <option>Default {channelType} configuration</option>
-                    </>
-                  )}
-                </select>
-              </label>
-              <p className="mt-1 text-[10px] text-muted-foreground">Resolves to {channelType}</p>
+                    </select>
+                  </label>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Resolves to {channelType}
+                  </p>
+                </>
+              )}
             </>
           )}
         </section>
@@ -1427,7 +1423,12 @@ function BuilderInner({
   workspaceName: string;
   onBack: () => void;
   onCreateChannel: () => void;
-  onWebsiteSelected: (website: { name: string; domain: string }) => void;
+  onWebsiteSelected: (website: {
+    name: string;
+    domain: string;
+    logoUrl?: string;
+    logoName?: string;
+  }) => void;
 }) {
   const isWorkAgent = agent.type === "workflow";
   const [nodes, setNodes, onNodesChange] = useNodesState(
@@ -2064,6 +2065,7 @@ type WebsiteConfiguration = {
   domain: string;
   sessions: number;
   logoUrl?: string;
+  logoName?: string;
 };
 
 const WEBSITE_CONFIGURATIONS: WebsiteConfiguration[] = [
@@ -2098,25 +2100,10 @@ function WebsiteDeploymentSettings({
   const [selectedWebsite, setSelectedWebsite] = useState<string | null>(null);
   const [websiteConfigurations, setWebsiteConfigurations] = useState(WEBSITE_CONFIGURATIONS);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [websiteName, setWebsiteName] = useState("");
-  const [websiteLink, setWebsiteLink] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
 
   const selected = websiteConfigurations.find((website) => website.id === selectedWebsite);
 
-  useEffect(() => {
-    if (agent.type === "workflow" && websiteConfigurations.length > 0) {
-      const firstWebsite = websiteConfigurations[0];
-      onNext(firstWebsite);
-    }
-  }, []);
-
-  const closeCreatePanel = () => {
-    setIsCreateOpen(false);
-    setWebsiteName("");
-    setWebsiteLink("");
-    setLogoUrl("");
-  };
+  const closeCreatePanel = () => setIsCreateOpen(false);
 
   return (
     <main className="min-h-0 flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-5">
@@ -2242,116 +2229,27 @@ function WebsiteDeploymentSettings({
           <aside
             role="dialog"
             aria-modal="true"
-            aria-labelledby="website-configuration-title"
+            aria-label="Website configuration"
             className="relative z-10 flex h-full w-full max-w-[470px] flex-col bg-card shadow-[-12px_0_36px_rgba(15,23,42,0.18)]"
           >
-            <div className="flex h-[62px] shrink-0 items-center justify-between border-b border-border px-5">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white">
-                  <Globe2 className="h-[18px] w-[18px]" />
+            <WebsiteConfigPanel
+              logo={
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white">
+                  <Globe2 className="h-5 w-5" />
                 </span>
-                <h2
-                  id="website-configuration-title"
-                  className="truncate text-[18px] font-semibold text-[#333A50]"
-                >
-                  Website Configuration
-                </h2>
-              </div>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={closeCreatePanel}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-foreground transition hover:bg-hover"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form
-              className="flex min-h-0 flex-1 flex-col"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const name = websiteName.trim();
-                if (!name) return;
-
-                const createdWebsite: WebsiteConfiguration = {
+              }
+              onClose={closeCreatePanel}
+              onSubmit={(website) =>
+                onNext({
                   id: `website-${Date.now()}`,
-                  name,
-                  domain: websiteLink.trim() || "Website link not provided",
+                  name: website.name,
+                  domain: website.link,
                   sessions: 0,
-                  logoUrl: logoUrl.trim() || undefined,
-                };
-
-                onNext(createdWebsite);
-              }}
-            >
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-                <h3 className="text-[15px] font-semibold text-[#333A50]">Configure</h3>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  Fill out your required website integration details below.
-                </p>
-
-                <div className="mt-5 space-y-4">
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#333A50]">
-                      Name <span className="text-[#C72B65]">*</span>
-                    </span>
-                    <input
-                      autoFocus
-                      required
-                      value={websiteName}
-                      onChange={(event) => setWebsiteName(event.target.value)}
-                      placeholder="Enter the website name"
-                      className="mt-2 h-10 w-full rounded-lg border border-border bg-card px-3 text-[12px] text-foreground outline-none transition placeholder:text-muted-foreground focus:border-[#C72B65] focus:ring-2 focus:ring-[#C72B65]/10"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#333A50]">Website Link</span>
-                    <input
-                      type="text"
-                      inputMode="url"
-                      value={websiteLink}
-                      onChange={(event) => setWebsiteLink(event.target.value)}
-                      placeholder="Enter the website link"
-                      className="mt-2 h-10 w-full rounded-lg border border-border bg-card px-3 text-[12px] text-foreground outline-none transition placeholder:text-muted-foreground focus:border-[#C72B65] focus:ring-2 focus:ring-[#C72B65]/10"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-[12px] font-medium text-[#333A50]">Logo</span>
-                    <span className="relative mt-2 block">
-                      <input
-                        type="text"
-                        inputMode="url"
-                        value={logoUrl}
-                        onChange={(event) => setLogoUrl(event.target.value)}
-                        placeholder="Enter the logo URL"
-                        className="h-10 w-full rounded-lg border border-border bg-card px-3 pr-10 text-[12px] text-foreground outline-none transition placeholder:text-muted-foreground focus:border-[#C72B65] focus:ring-2 focus:ring-[#C72B65]/10"
-                      />
-                      <Upload className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 justify-end gap-3 border-t border-border px-5 py-5">
-                <button
-                  type="button"
-                  onClick={closeCreatePanel}
-                  className="inline-flex h-9 items-center justify-center rounded-lg border border-border bg-card px-4 text-[12px] font-medium text-[#C72B65] transition hover:bg-hover"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!websiteName.trim()}
-                  className="inline-flex h-9 items-center justify-center rounded-lg border border-[#C72B65] bg-[#FDF3F7] px-4 text-[12px] font-medium text-[#C72B65] transition hover:bg-[#FBE6EE] disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
-                >
-                  Submit
-                </button>
-              </div>
-            </form>
+                  logoUrl: website.logoUrl || undefined,
+                  logoName: website.logoName || undefined,
+                })
+              }
+            />
           </aside>
         </div>
       )}
@@ -2366,7 +2264,12 @@ export function ConversationFlowBuilder(props: {
   workspaceName: string;
   onBack: () => void;
   onCreateChannel: () => void;
-  onWebsiteSelected: (website: { name: string; domain: string }) => void;
+  onWebsiteSelected: (website: {
+    name: string;
+    domain: string;
+    logoUrl?: string;
+    logoName?: string;
+  }) => void;
 }) {
   return (
     <ReactFlowProvider>

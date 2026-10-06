@@ -560,7 +560,13 @@ export function ChannelListView({
   onCreate: () => void;
   onCreateIntegration?: () => void;
   onViewWorkflow?: (workflow: { id: string; name: string }) => void;
-  initialWebsite?: { name: string; domain: string; workflow?: DeploymentSource } | null;
+  initialWebsite?: {
+    name: string;
+    domain: string;
+    logoUrl?: string;
+    logoName?: string;
+    workflow?: DeploymentSource;
+  } | null;
   workflowAgents?: Agent[];
   extraRows?: Record<string, string>[];
   highlightRowId?: string | null;
@@ -584,6 +590,8 @@ export function ChannelListView({
           id: `deployed-${initialWebsite.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
           websiteName: initialWebsite.name,
           domain: initialWebsite.domain,
+          logoUrl: initialWebsite.logoUrl ?? "",
+          logoName: initialWebsite.logoName ?? "",
           userType: "Guest User",
           widgetId: "Pending",
           primaryAgent: "—",
