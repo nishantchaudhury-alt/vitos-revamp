@@ -16,6 +16,7 @@ import {
   type NodeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { PromptPlayground } from "./PromptPlayground";
 import {
   ArrowLeft,
   ArrowRight,
@@ -38,6 +39,7 @@ import {
   Minus,
   MousePointer2,
   PanelLeftClose,
+  Pencil,
   Phone,
   PhoneIncoming,
   PhoneOutgoing,
@@ -1438,6 +1440,7 @@ function BuilderInner({
   const [saved, setSaved] = useState(false);
   const [running, setRunning] = useState(false);
   const [showDeploymentSettings, setShowDeploymentSettings] = useState(false);
+  const [showPromptPlayground, setShowPromptPlayground] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const minimapColor = useCallback((node: Node) => {
@@ -1477,7 +1480,9 @@ function BuilderInner({
           <span className="text-border">/</span>
           <span className="text-muted-foreground">AI Agents</span>
           <span className="text-border">/</span>
-          <span className="truncate font-medium text-[#C72B65]">{agent.name}</span>
+          <span className="truncate font-medium text-[#C72B65]">
+            {showPromptPlayground ? "Test Prompt Playground" : agent.name}
+          </span>
         </nav>
         <div className="flex-1" />
         <span className="flex h-9 w-12 items-center justify-center rounded-full border border-[#C72B65] bg-card shadow-sm">
@@ -1485,7 +1490,9 @@ function BuilderInner({
         </span>
       </header>
 
-      {showDeploymentSettings ? (
+      {showPromptPlayground ? (
+        <PromptPlayground onBack={() => setShowPromptPlayground(false)} />
+      ) : showDeploymentSettings ? (
         agent.subType === "voice" && agent.voiceMode === "multi" ? (
           <MultiVoiceDeploymentSettings
             agent={agent}
@@ -1541,6 +1548,15 @@ function BuilderInner({
               className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
             >
               <Rocket className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Open prompt playground"
+              title="Prompt playground"
+              onClick={() => setShowPromptPlayground(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
+            >
+              <Pencil className="h-4 w-4" />
             </button>
           </div>
 
