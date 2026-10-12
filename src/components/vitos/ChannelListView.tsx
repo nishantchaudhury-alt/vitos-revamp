@@ -1097,6 +1097,8 @@ type WebsiteDeployment = (typeof WEBSITE_DEPLOYMENTS)[number];
 
 export type DeploymentSource = { id: string; name: string; version: string };
 
+type LiveDeployment = { deploymentId: string; name: string; version: string; allocation: string };
+
 function nextVersion(versions: string[]) {
   const parsed = versions.map((version) => version.split(".").map((part) => Number(part) || 0));
   const highest = parsed.reduce(
@@ -1459,19 +1461,25 @@ function WebsiteConfigurationView({
   const [selectedDeployment, setSelectedDeployment] = useState(row.selectedDeployment ?? "");
   const toggleDeployment = (id: string) =>
     setSelectedDeployment((current) => (current === id ? "" : id));
-  const [deployedDeployment, setDeployedDeployment] = useState(row.deployedDeployment ?? "");
-  const [deployedFlow, setDeployedFlow] = useState({
-    name: row.deployedFlowName ?? "",
-    version: row.deployedFlowVersion ?? "",
-    allocation: row.deployedFlowAllocation ?? "",
+  const [liveByFlow, setLiveByFlow] = useState<Record<string, LiveDeployment>>(() => {
+    try {
+      return row.liveDeployments ? JSON.parse(row.liveDeployments) : {};
+    } catch {
+      return {};
+    }
   });
+  const [justDeployed, setJustDeployed] = useState(false);
   const deployVersion = (deployment: WebsiteDeployment) => {
-    setDeployedDeployment(deployment.id);
-    setDeployedFlow({
-      name: deployment.name,
-      version: deployment.version,
-      allocation: deploymentAllocations[deployment.id] ?? deployment.deployment,
-    });
+    setLiveByFlow((current) => ({
+      ...current,
+      [deployment.flowId]: {
+        deploymentId: deployment.id,
+        name: deployment.name,
+        version: deployment.version,
+        allocation: deploymentAllocations[deployment.id] ?? deployment.deployment,
+      },
+    }));
+    setJustDeployed(true);
   };
   const [builderSource] = useState(deploymentSource);
   const [workflows, setWorkflows] = useState<DeploymentSource[]>(
@@ -1512,9 +1520,7 @@ function WebsiteConfigurationView({
     }
   });
   const domainHref = /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
-  const flowLive =
-    Boolean(deploymentSource) && deployedDeployment.startsWith(`${deploymentSource?.id}:`);
-  const liveElsewhere = Boolean(deployedDeployment) && !flowLive;
+  const currentLive = deploymentSource ? liveByFlow[deploymentSource.id] : undefined;
   const openWorkflowPicker = () => {
     setWorkflowDraft("");
     setWorkflowQuery("");
@@ -1588,8 +1594,8 @@ function WebsiteConfigurationView({
         <span className="font-medium text-[#B22257]">Website</span>
       </nav>
 
-      <section className="flex min-h-[calc(100vh-8.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-        <header className="flex items-center justify-between gap-4 border-b border-border px-4 py-3.5 sm:px-5">
+      <section className="flex h-[calc(100dvh-5.25rem)] min-h-[440px] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-4 py-3.5 sm:px-5">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {fromBuilder && builderSource && (
               <button
@@ -1615,7 +1621,7 @@ function WebsiteConfigurationView({
           </button>
         </header>
 
-        <div className="grid flex-1 gap-6 p-4 sm:p-5 lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)] lg:gap-0">
+        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain p-4 [scrollbar-width:none] sm:p-5 lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)] lg:gap-0 [&::-webkit-scrollbar]:hidden">
           <div className="order-2 flex flex-col gap-6 lg:order-1 lg:pr-5">
             <section aria-labelledby="website-overview-heading">
               <header className="mb-2.5">
@@ -1791,7 +1797,7 @@ function WebsiteConfigurationView({
                 </p>
               </header>
 
-              <div className="lg:relative lg:min-h-[280px] lg:flex-1">
+              <div className="lg:relative lg:min-h-[200px] lg:flex-1">
                 <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card lg:absolute lg:inset-x-0 lg:top-0 lg:max-h-full">
                   <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/30 py-2 pl-3.5 pr-2">
                     <p
@@ -1919,63 +1925,60 @@ function WebsiteConfigurationView({
                   <div
                     role="radiogroup"
                     aria-labelledby="workflow-list-label"
-                    className="grid gap-2.5 p-3 sm:grid-cols-2 2xl:grid-cols-3"
+                    className="grid gap-2 p-2.5 sm:grid-cols-2 xl:grid-cols-3"
                   >
                     {workflows.map((workflow) => {
                       const active = workflow.id === deploymentSource?.id;
-                      const live = deployedDeployment.startsWith(`${workflow.id}:`);
+                      const live = liveByFlow[workflow.id];
                       return (
                         <button
                           key={workflow.id}
                           type="button"
                           role="radio"
                           aria-checked={active}
+                          title={workflow.name}
                           onClick={() => selectWorkflow(workflow)}
                           className={cn(
-                            "flex min-w-0 items-center gap-3 rounded-xl border bg-card p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
+                            "flex h-10 min-w-0 items-center gap-2.5 rounded-lg border bg-card pl-2 pr-2.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
                             active
                               ? "border-[#B22257] bg-[#FEFAFC] ring-1 ring-[#B22257]/15"
-                              : "border-border hover:border-[#B22257]/35",
+                              : "border-border hover:border-[#B22257]/35 hover:bg-muted/20",
                           )}
                         >
                           <span
                             className={cn(
-                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition",
+                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition",
                               active
-                                ? "border-[#B22257]/20 bg-[#FDF3F7] text-[#B22257]"
-                                : "border-border bg-muted/30 text-muted-foreground",
+                                ? "bg-[#FDF3F7] text-[#B22257]"
+                                : "bg-muted/50 text-muted-foreground",
                             )}
                             aria-hidden="true"
                           >
-                            <Workflow className="h-[18px] w-[18px]" />
+                            <Workflow className="h-3.5 w-3.5" />
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13.5px] font-semibold text-foreground">
-                              {workflow.name}
-                            </span>
-                            <span className="mt-0.5 flex items-center gap-2 text-[12px] text-muted-foreground">
-                              <span className="font-mono text-[11.5px]">
-                                v
-                                {live && deployedFlow.version
-                                  ? deployedFlow.version
-                                  : workflow.version}
-                              </span>
-                              {live && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
-                                  <span
-                                    className="h-1.5 w-1.5 rounded-full bg-emerald-500"
-                                    aria-hidden="true"
-                                  />
-                                  Live
-                                  {deployedFlow.allocation && (
-                                    <span className="tabular-nums">
-                                      · {deployedFlow.allocation}
-                                    </span>
-                                  )}
-                                </span>
+                          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-foreground">
+                            {workflow.name}
+                          </span>
+                          {live ? (
+                            <span
+                              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100"
+                              title={`Live: v${live.version} · ${live.allocation}`}
+                            >
+                              <span
+                                className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                aria-hidden="true"
+                              />
+                              <span className="sr-only">Live</span>
+                              <span className="font-mono">v{live.version}</span>
+                              {live.allocation && (
+                                <span className="tabular-nums">· {live.allocation}</span>
                               )}
                             </span>
-                          </span>
+                          ) : (
+                            <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                              v{workflow.version}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -2009,224 +2012,217 @@ function WebsiteConfigurationView({
                     Select a version to configure and deploy.
                   </p>
                 )}
-                {liveElsewhere && (
-                  <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                    Live now:
-                    <span className="font-medium text-foreground">
-                      {deployedFlow.name || "another workflow"}
-                    </span>
-                    {deployedFlow.version && (
-                      <span className="font-mono text-[11.5px]">v{deployedFlow.version}</span>
-                    )}
-                  </p>
-                )}
               </header>
               {deploymentSource ? (
-                <div className="relative flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[680px] table-fixed text-left text-[12.5px]">
-                      <thead className="border-b border-border bg-muted/30 text-[12px] text-muted-foreground">
-                        <tr>
-                          <th className="w-14 px-3 py-2.5 font-medium">#</th>
-                          <th className="px-3 py-2.5 font-medium">Flow name</th>
-                          <th className="w-20 px-3 py-2.5 font-medium">Version</th>
-                          <th className="w-28 px-3 py-2.5 font-medium">Allocation</th>
-                          <th className="w-48 px-3 py-2.5 font-medium">Integration</th>
-                          <th className="w-28 px-3 py-2.5 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {deployments.map((deployment, index) => {
-                          const selected = selectedDeployment === deployment.id;
-                          const assignedApi = INTEGRATION_APIS.find(
-                            (api) => api.id === apiAssignments[deployment.id],
-                          );
-                          return (
-                            <Fragment key={deployment.id}>
-                              <tr
-                                onClick={() => toggleDeployment(deployment.id)}
-                                className={cn(
-                                  "group cursor-pointer border-t border-border transition first:border-t-0",
-                                  selected
-                                    ? "bg-[#FDF3F7]/60 shadow-[inset_2px_0_0_#B22257]"
-                                    : "hover:bg-muted/25",
-                                )}
-                              >
-                                <td className="px-3 py-2.5 text-muted-foreground">
-                                  <div className="flex items-center gap-2.5">
+                <div className="flex flex-1 flex-col lg:relative lg:min-h-[260px]">
+                  <div className="relative flex min-h-fit flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card lg:absolute lg:inset-0 lg:min-h-0">
+                    <div className="min-h-[124px] shrink overflow-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      <table className="w-full min-w-[540px] table-fixed whitespace-nowrap text-left text-[12.5px] min-[1400px]:min-w-[640px]">
+                        <thead className="sticky top-0 z-10 bg-card text-[12px] text-muted-foreground shadow-[inset_0_-1px_0_var(--color-border)] [&_th]:bg-muted/30">
+                          <tr>
+                            <th className="w-14 px-3 py-2.5 font-medium">#</th>
+                            <th className="hidden px-3 py-2.5 font-medium min-[1400px]:table-cell">
+                              Flow name
+                            </th>
+                            <th className="w-20 px-3 py-2.5 font-medium">Version</th>
+                            <th className="w-28 px-3 py-2.5 font-medium">Allocation</th>
+                            <th className="w-48 px-3 py-2.5 font-medium">Integration</th>
+                            <th className="w-28 px-3 py-2.5 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {deployments.map((deployment, index) => {
+                            const selected = selectedDeployment === deployment.id;
+                            const assignedApi = INTEGRATION_APIS.find(
+                              (api) => api.id === apiAssignments[deployment.id],
+                            );
+                            return (
+                              <Fragment key={deployment.id}>
+                                <tr
+                                  onClick={() => toggleDeployment(deployment.id)}
+                                  className={cn(
+                                    "group cursor-pointer border-t border-border transition first:border-t-0",
+                                    selected
+                                      ? "bg-[#FDF3F7]/60 shadow-[inset_2px_0_0_#B22257]"
+                                      : "hover:bg-muted/25",
+                                  )}
+                                >
+                                  <td className="px-3 py-2.5 text-muted-foreground">
+                                    <div className="flex items-center gap-2.5">
+                                      <button
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={selected}
+                                        aria-label={`Select version ${deployment.version}`}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          toggleDeployment(deployment.id);
+                                        }}
+                                        className={cn(
+                                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35 focus-visible:ring-offset-1",
+                                          selected
+                                            ? "border-[#B22257]"
+                                            : "border-border bg-card group-hover:border-[#B22257]/55",
+                                        )}
+                                      >
+                                        {selected && (
+                                          <span
+                                            className="h-2 w-2 rounded-full bg-[#B22257]"
+                                            aria-hidden="true"
+                                          />
+                                        )}
+                                      </button>
+                                      <span>{index + 1}.</span>
+                                    </div>
+                                  </td>
+                                  <td
+                                    title={deployment.name}
+                                    className="hidden truncate px-3 py-2.5 font-medium text-foreground min-[1400px]:table-cell"
+                                  >
+                                    {deployment.name}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="font-mono text-[11.5px] text-muted-foreground">
+                                      v{deployment.version}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-foreground">
                                     <button
                                       type="button"
-                                      role="radio"
-                                      aria-checked={selected}
-                                      aria-label={`Select version ${deployment.version}`}
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        toggleDeployment(deployment.id);
+                                        const currentAllocation = Number.parseInt(
+                                          (
+                                            deploymentAllocations[deployment.id] ??
+                                            deployment.deployment
+                                          ).replace("%", ""),
+                                        );
+                                        setAllocationDraft(
+                                          Number.isNaN(currentAllocation) ? 100 : currentAllocation,
+                                        );
+                                        setAllocationTarget(deployment);
                                       }}
-                                      className={cn(
-                                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35 focus-visible:ring-offset-1",
-                                        selected
-                                          ? "border-[#B22257]"
-                                          : "border-border bg-card group-hover:border-[#B22257]/55",
-                                      )}
+                                      aria-label={`Edit allocation for version ${deployment.version}`}
+                                      title="Edit allocation"
+                                      className="group/pill inline-flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-[12px] font-medium text-foreground ring-1 ring-inset ring-border transition hover:bg-muted hover:ring-[#B22257]/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
                                     >
-                                      {selected && (
+                                      <span className="tabular-nums">
+                                        {deploymentAllocations[deployment.id] ??
+                                          deployment.deployment}
+                                      </span>
+                                      <Pencil
+                                        className="h-3 w-0 shrink-0 opacity-0 transition-all duration-150 group-hover/pill:w-3 group-hover/pill:opacity-100 group-focus-visible/pill:w-3 group-focus-visible/pill:opacity-100 [@media(hover:none)]:w-3 [@media(hover:none)]:opacity-100 text-muted-foreground"
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    {assignedApi ? (
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setSelectedDeployment(deployment.id);
+                                          setApiDraft(apiAssignments[deployment.id] ?? "");
+                                          setApiQuery("");
+                                          setApiFilter("all");
+                                          setApiConfigOpen(true);
+                                        }}
+                                        aria-label={`Change integration for version ${deployment.version}, currently ${assignedApi.name}`}
+                                        title="Change integration"
+                                        className="group/pill inline-flex max-w-full items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-100 transition hover:bg-emerald-100/70 hover:ring-emerald-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
+                                      >
                                         <span
-                                          className="h-2 w-2 rounded-full bg-[#B22257]"
+                                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
                                           aria-hidden="true"
                                         />
-                                      )}
-                                    </button>
-                                    <span>{index + 1}.</span>
-                                  </div>
-                                </td>
-                                <td
-                                  title={deployment.name}
-                                  className="truncate px-3 py-2.5 font-medium text-foreground"
-                                >
-                                  {deployment.name}
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <span className="font-mono text-[11.5px] text-muted-foreground">
-                                    v{deployment.version}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5 text-foreground">
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      const currentAllocation = Number.parseInt(
-                                        (
-                                          deploymentAllocations[deployment.id] ??
-                                          deployment.deployment
-                                        ).replace("%", ""),
-                                      );
-                                      setAllocationDraft(
-                                        Number.isNaN(currentAllocation) ? 100 : currentAllocation,
-                                      );
-                                      setAllocationTarget(deployment);
-                                    }}
-                                    aria-label={`Edit allocation for version ${deployment.version}`}
-                                    title="Edit allocation"
-                                    className="group/pill inline-flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-[12px] font-medium text-foreground ring-1 ring-inset ring-border transition hover:bg-muted hover:ring-[#B22257]/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
-                                  >
-                                    <span className="tabular-nums">
-                                      {deploymentAllocations[deployment.id] ??
-                                        deployment.deployment}
-                                    </span>
-                                    <Pencil
-                                      className="h-3 w-0 shrink-0 opacity-0 transition-all duration-150 group-hover/pill:w-3 group-hover/pill:opacity-100 group-focus-visible/pill:w-3 group-focus-visible/pill:opacity-100 [@media(hover:none)]:w-3 [@media(hover:none)]:opacity-100 text-muted-foreground"
-                                      aria-hidden="true"
-                                    />
-                                  </button>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  {assignedApi ? (
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        setSelectedDeployment(deployment.id);
-                                        setApiDraft(apiAssignments[deployment.id] ?? "");
-                                        setApiQuery("");
-                                        setApiFilter("all");
-                                        setApiConfigOpen(true);
-                                      }}
-                                      aria-label={`Change integration for version ${deployment.version}, currently ${assignedApi.name}`}
-                                      title="Change integration"
-                                      className="group/pill inline-flex max-w-full items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[12px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-100 transition hover:bg-emerald-100/70 hover:ring-emerald-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
-                                    >
+                                        <span className="truncate">{assignedApi.name}</span>
+                                        <Pencil
+                                          className="h-3 w-0 shrink-0 opacity-0 transition-all duration-150 group-hover/pill:w-3 group-hover/pill:opacity-100 group-focus-visible/pill:w-3 group-focus-visible/pill:opacity-100 [@media(hover:none)]:w-3 [@media(hover:none)]:opacity-100 text-emerald-700"
+                                          aria-hidden="true"
+                                        />
+                                      </button>
+                                    ) : (
+                                      <span className="flex items-center gap-2 text-[12px] text-muted-foreground">
+                                        <span
+                                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                                          aria-hidden="true"
+                                        />
+                                        Not configured
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    {currentLive?.deploymentId === deployment.id ? (
                                       <span
-                                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
-                                        aria-hidden="true"
-                                      />
-                                      <span className="truncate">{assignedApi.name}</span>
-                                      <Pencil
-                                        className="h-3 w-0 shrink-0 opacity-0 transition-all duration-150 group-hover/pill:w-3 group-hover/pill:opacity-100 group-focus-visible/pill:w-3 group-focus-visible/pill:opacity-100 [@media(hover:none)]:w-3 [@media(hover:none)]:opacity-100 text-emerald-700"
-                                        aria-hidden="true"
-                                      />
-                                    </button>
-                                  ) : (
-                                    <span className="flex items-center gap-2 text-[12px] text-muted-foreground">
-                                      <span
-                                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
-                                        aria-hidden="true"
-                                      />
-                                      Not configured
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  {deployedDeployment === deployment.id ? (
-                                    <span
-                                      role="status"
-                                      className="flex items-center gap-2 text-[12px] font-medium text-emerald-700"
-                                    >
-                                      <span
-                                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
-                                        aria-hidden="true"
-                                      />
-                                      Deployed
-                                    </span>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      disabled={!(selected && visualBot && assignedApi)}
-                                      title={
-                                        !assignedApi
-                                          ? "Connect an integration to deploy"
-                                          : !selected
-                                            ? "Select this version to deploy"
-                                            : undefined
-                                      }
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        if (deployedDeployment) {
-                                          setReplaceTarget(deployment);
-                                        } else {
-                                          deployVersion(deployment);
+                                        role="status"
+                                        className="flex items-center gap-2 text-[12px] font-medium text-emerald-700"
+                                      >
+                                        <span
+                                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                                          aria-hidden="true"
+                                        />
+                                        Deployed
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        disabled={!(selected && visualBot && assignedApi)}
+                                        title={
+                                          !assignedApi
+                                            ? "Connect an integration to deploy"
+                                            : !selected
+                                              ? "Select this version to deploy"
+                                              : undefined
                                         }
-                                      }}
-                                      className="inline-flex h-7 min-w-[76px] items-center justify-center rounded-md bg-[#B22257] px-2.5 text-[11.5px] font-medium text-white shadow-sm transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-muted/40 disabled:text-muted-foreground/70 disabled:shadow-none"
-                                    >
-                                      Deploy
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            </Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  {selectedDeploymentDetails &&
-                    selectedDeploymentDetails.id !== deployedDeployment && (
-                      <div className="border-t border-border">
-                        <WebsiteDeploymentConfiguration
-                          deployment={selectedDeploymentDetails}
-                          assignedApi={selectedApiDetails}
-                          onSelectIntegration={() => {
-                            setApiDraft(selectedApiId);
-                            setApiQuery("");
-                            setApiFilter("all");
-                            setApiConfigOpen(true);
-                          }}
-                        />
-                      </div>
-                    )}
-                  <div className="min-h-0 flex-1 border-t border-border [container-type:size]">
-                    <div className="hidden h-full items-center justify-center gap-5 px-6 [@container(min-height:96px)]:flex [@container(min-height:200px)]:flex-col [@container(min-height:200px)]:gap-3">
-                      <VersionsFillerIllustration className="w-[150px] [@container(min-height:200px)]:w-[220px]" />
-                      <div className="text-left [@container(min-height:200px)]:text-center">
-                        <p className="text-[13px] font-semibold text-foreground">
-                          Room for more versions
-                        </p>
-                        <p className="mt-1 max-w-xs text-[12px] leading-relaxed text-muted-foreground [@container(min-height:200px)]:mx-auto">
-                          Edit a version&apos;s allocation and save it to add another version here.
-                        </p>
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          if (liveByFlow[deployment.flowId]) {
+                                            setReplaceTarget(deployment);
+                                          } else {
+                                            deployVersion(deployment);
+                                          }
+                                        }}
+                                        className="inline-flex h-7 min-w-[76px] items-center justify-center rounded-md bg-[#B22257] px-2.5 text-[11.5px] font-medium text-white shadow-sm transition hover:bg-[#971D49] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/40 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:border disabled:border-border disabled:bg-muted/40 disabled:text-muted-foreground/70 disabled:shadow-none"
+                                      >
+                                        Deploy
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              </Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {selectedDeploymentDetails &&
+                      selectedDeploymentDetails.id !== currentLive?.deploymentId && (
+                        <div className="shrink-0 border-t border-border">
+                          <WebsiteDeploymentConfiguration
+                            deployment={selectedDeploymentDetails}
+                            assignedApi={selectedApiDetails}
+                            onSelectIntegration={() => {
+                              setApiDraft(selectedApiId);
+                              setApiQuery("");
+                              setApiFilter("all");
+                              setApiConfigOpen(true);
+                            }}
+                          />
+                        </div>
+                      )}
+                    <div className="min-h-0 flex-1 border-t border-border [container-type:size]">
+                      <div className="hidden h-full items-center justify-center gap-5 px-6 [@container(min-height:96px)]:flex [@container(min-height:200px)]:flex-col [@container(min-height:200px)]:gap-3">
+                        <VersionsFillerIllustration className="w-[150px] [@container(min-height:200px)]:w-[220px]" />
+                        <div className="text-left [@container(min-height:200px)]:text-center">
+                          <p className="text-[13px] font-semibold text-foreground">
+                            Room for more versions
+                          </p>
+                          <p className="mt-1 max-w-xs text-[12px] leading-relaxed text-muted-foreground [@container(min-height:200px)]:mx-auto">
+                            Edit a version&apos;s allocation and save it to add another version
+                            here.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2255,8 +2251,8 @@ function WebsiteConfigurationView({
           </div>
         </div>
 
-        <footer className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-3.5">
-          {deployedDeployment && (
+        <footer className="mt-auto flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border px-4 py-3.5">
+          {justDeployed && (
             <p className="mr-auto text-[12px] font-medium text-emerald-700" role="status">
               Deployment updated successfully.
             </p>
@@ -2272,10 +2268,7 @@ function WebsiteConfigurationView({
                 logoUrl,
                 visualBot,
                 selectedDeployment,
-                deployedDeployment,
-                deployedFlowName: deployedFlow.name,
-                deployedFlowVersion: deployedFlow.version,
-                deployedFlowAllocation: deployedFlow.allocation,
+                liveDeployments: JSON.stringify(liveByFlow),
                 apiAssignments: JSON.stringify(apiAssignments),
                 deploymentAllocations: JSON.stringify(deploymentAllocations),
               })
@@ -2545,7 +2538,7 @@ function WebsiteConfigurationView({
               )}
               {filteredWorkflows.map((agent) => {
                 const draft = workflowDraft === agent.id;
-                const live = deployedDeployment.startsWith(`${agent.id}:`);
+                const live = Boolean(liveByFlow[agent.id]);
                 const added = workflows.some((workflow) => workflow.id === agent.id);
                 const typeMeta = TYPE_META[agent.type];
                 const status = STATUS_META[agent.status];
@@ -2664,54 +2657,54 @@ function WebsiteConfigurationView({
       {replaceTarget && (
         <ModalShell onClose={() => setReplaceTarget(null)}>
           {(() => {
-            const sameFlow = deployedFlow.name === replaceTarget.name;
-            const liveName = deployedFlow.name || "Another workflow";
+            const live = liveByFlow[replaceTarget.flowId];
+            const nextAllocation =
+              deploymentAllocations[replaceTarget.id] ?? replaceTarget.deployment;
             return (
               <>
                 <h2 className="pr-8 text-[17px] font-semibold text-foreground">
-                  {sameFlow ? "Replace the live version?" : "Replace the live workflow?"}
+                  Replace the live version?
                 </h2>
                 <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
-                  Only one version can be live on {websiteName} at a time.
+                  Only one version of{" "}
+                  <span className="font-medium text-foreground">{replaceTarget.name}</span> can be
+                  live at a time. Other workflows on {websiteName} stay live.
                 </p>
 
                 <div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">
-                  <div className="flex items-center gap-3 px-3.5 py-3">
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11.5px] text-muted-foreground">Live now</p>
-                      <p className="truncate text-[13px] font-medium text-foreground">{liveName}</p>
-                    </div>
-                    {deployedFlow.version && (
+                  {live && (
+                    <div className="flex items-center gap-3 px-3.5 py-3">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                        aria-hidden="true"
+                      />
+                      <p className="min-w-0 flex-1 text-[11.5px] text-muted-foreground">Live now</p>
                       <span className="shrink-0 font-mono text-[12px] text-muted-foreground">
-                        v{deployedFlow.version}
+                        v{live.version}
                       </span>
-                    )}
-                  </div>
+                      <span className="w-12 shrink-0 text-right text-[12px] tabular-nums text-muted-foreground">
+                        {live.allocation}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 bg-[#FDF3F7]/60 px-3.5 py-3">
                     <span
                       className="h-2 w-2 shrink-0 rounded-full bg-[#B22257]"
                       aria-hidden="true"
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11.5px] text-muted-foreground">Goes live</p>
-                      <p className="truncate text-[13px] font-medium text-foreground">
-                        {replaceTarget.name}
-                      </p>
-                    </div>
+                    <p className="min-w-0 flex-1 text-[11.5px] text-muted-foreground">Goes live</p>
                     <span className="shrink-0 font-mono text-[12px] font-medium text-[#B22257]">
                       v{replaceTarget.version}
+                    </span>
+                    <span className="w-12 shrink-0 text-right text-[12px] font-medium tabular-nums text-[#B22257]">
+                      {nextAllocation}
                     </span>
                   </div>
                 </div>
 
                 <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
                   Visitors switch over as soon as you deploy.
-                  {deployedFlow.version &&
-                    ` To go back, deploy ${sameFlow ? "" : `${liveName} `}v${deployedFlow.version} again.`}
+                  {live && ` To go back, deploy v${live.version} again.`}
                 </p>
 
                 <div className="mt-5 flex items-center justify-end gap-2">
@@ -2720,7 +2713,7 @@ function WebsiteConfigurationView({
                     onClick={() => setReplaceTarget(null)}
                     className="h-9 rounded-lg border border-border bg-card px-4 text-[13px] font-medium text-foreground transition hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35"
                   >
-                    {deployedFlow.version ? `Keep v${deployedFlow.version}` : "Cancel"}
+                    {live ? `Keep v${live.version}` : "Cancel"}
                   </button>
                   <button
                     type="button"
