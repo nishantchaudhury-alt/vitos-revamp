@@ -1,8 +1,12 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   ArrowRight,
+  Bot,
+  SendHorizontal,
+  CheckCheck,
+  Paperclip,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -13,6 +17,9 @@ import {
   Globe,
   Maximize2,
   Pencil,
+  Info,
+  Minus,
+  MoreVertical,
   Plus,
   Search,
   SlidersHorizontal,
@@ -897,78 +904,401 @@ export function ChannelListView({
   );
 }
 
-const VISUAL_BOTS = [
+type VisualBotTheme = {
+  header: string;
+  headerText: string;
+  surface: string;
+  botBubble: string;
+  botText: string;
+  userBubble: string;
+  userText: string;
+  border: string;
+  agentName: string;
+  greeting: string;
+  userMessage: string;
+  reply: string;
+  chips?: string[];
+};
+
+type VisualBot = {
+  id: string;
+  name: string;
+  description: string;
+  updated: string;
+  created: string;
+  theme: VisualBotTheme;
+};
+
+const LIGHT = { surface: "#FFFFFF", botBubble: "#F1F5F9", botText: "#0F172A", border: "#E2E8F0" };
+
+const VISUAL_BOTS: VisualBot[] = [
   {
-    id: "testing",
-    name: "testing",
-    description: "testing",
+    id: "kapture-default",
+    name: "Kapture Default Chat",
+    description: "Standard website widget with brand header",
     updated: "14-08-2026",
     created: "10-09-2025",
+    theme: {
+      ...LIGHT,
+      header: "#B22257",
+      headerText: "#FFFFFF",
+      userBubble: "#B22257",
+      userText: "#FFFFFF",
+      agentName: "Kapture Assistant",
+      greeting: "Hi there! 👋 How can I help you today?",
+      userMessage: "I want to check my loan status",
+      reply: "Sure! Could you share your registered mobile number?",
+    },
   },
   {
-    id: "green",
-    name: "Green",
-    description: "Green UI",
+    id: "help-center-light",
+    name: "Help Center – Light",
+    description: "Minimal light theme for support articles",
     updated: "05-08-2026",
     created: "10-09-2025",
+    theme: {
+      ...LIGHT,
+      header: "#FFFFFF",
+      headerText: "#0F172A",
+      userBubble: "#2563EB",
+      userText: "#FFFFFF",
+      agentName: "Help Center",
+      greeting: "Search our guides or ask me anything.",
+      userMessage: "How do I reset my PIN?",
+      reply: "Go to Settings → Security → Reset PIN. Want me to send the steps?",
+      chips: ["Yes, send steps", "Talk to an agent"],
+    },
   },
   {
-    id: "unnamed",
-    name: "Unnamed",
-    description: "Default website chat",
+    id: "loan-assist-hindi",
+    name: "Loan Assist (Hindi)",
+    description: "Quick replies for loan pages with a Hindi greeting",
     updated: "13-07-2026",
     created: "10-09-2025",
+    theme: {
+      ...LIGHT,
+      header: "#0F766E",
+      headerText: "#FFFFFF",
+      userBubble: "#0F766E",
+      userText: "#FFFFFF",
+      agentName: "Loan Saathi",
+      greeting: "Namaste! Main aapki loan application mein madad kar sakti hoon.",
+      userMessage: "EMI kitni hogi?",
+      reply: "₹2,40,000 ke liye 36 mahine mein lagbhag ₹7,971 per month.",
+      chips: ["Apply now", "Documents list"],
+    },
   },
   {
-    id: "brand-dark",
-    name: "Brand Dark",
-    description: "Dark theme with brand accents",
+    id: "midnight-concierge",
+    name: "Midnight Concierge",
+    description: "Dark theme for premium banking pages",
     updated: "02-09-2026",
     created: "18-03-2026",
+    theme: {
+      header: "#020617",
+      headerText: "#F8FAFC",
+      surface: "#0F172A",
+      botBubble: "#1E293B",
+      botText: "#E2E8F0",
+      userBubble: "#D4AF37",
+      userText: "#0F172A",
+      border: "#1E293B",
+      agentName: "Private Banking",
+      greeting: "Good evening. Your relationship manager is a message away.",
+      userMessage: "Book a call for tomorrow",
+      reply: "Done. You'll get a call at 11:00 AM tomorrow.",
+    },
   },
   {
-    id: "minimal-light",
-    name: "Minimal Light",
-    description: "Clean light theme, no avatar",
+    id: "diwali-offers-2026",
+    name: "Diwali Offers 2026",
+    description: "Seasonal campaign styling with offer chips",
     updated: "28-08-2026",
     created: "11-02-2026",
+    theme: {
+      ...LIGHT,
+      header: "#EA580C",
+      headerText: "#FFFFFF",
+      botBubble: "#FFF7ED",
+      userBubble: "#EA580C",
+      userText: "#FFFFFF",
+      agentName: "Festive Deals",
+      greeting: "🪔 Happy Diwali! Zero processing fee on loans this week.",
+      userMessage: "Is this for personal loans too?",
+      reply: "Yes! Personal and gold loans until 3 Nov.",
+      chips: ["Check eligibility", "View offers"],
+    },
   },
   {
-    id: "support-widget",
-    name: "Support Widget",
-    description: "Compact launcher for help pages",
+    id: "mobile-app-fullscreen",
+    name: "Mobile App – Full Screen",
+    description: "Full-screen chat inside the mobile app",
     updated: "21-08-2026",
     created: "04-01-2026",
+    theme: {
+      ...LIGHT,
+      header: "#7C3AED",
+      headerText: "#FFFFFF",
+      userBubble: "#7C3AED",
+      userText: "#FFFFFF",
+      agentName: "App Support",
+      greeting: "Hi Rajeev! Picking up where you left off.",
+      userMessage: "Upload my PAN",
+      reply: "Tap the camera icon below to scan your PAN card.",
+    },
   },
   {
-    id: "festive-sale",
-    name: "Festive Sale",
-    description: "Seasonal campaign styling",
+    id: "collections-reminder",
+    name: "Collections Reminder",
+    description: "Neutral tone for EMI and payment reminders",
     updated: "16-08-2026",
     created: "22-07-2026",
+    theme: {
+      ...LIGHT,
+      header: "#334155",
+      headerText: "#FFFFFF",
+      userBubble: "#334155",
+      userText: "#FFFFFF",
+      agentName: "Payments",
+      greeting: "Your EMI of ₹7,971 is due on 5 Nov.",
+      userMessage: "Can I pay now?",
+      reply: "Of course. Choose UPI, card or net banking.",
+      chips: ["Pay with UPI", "Remind me later"],
+    },
   },
   {
-    id: "mobile-first",
-    name: "Mobile First",
-    description: "Full-screen chat on small screens",
+    id: "new-customer-onboarding",
+    name: "New Customer Onboarding",
+    description: "Step-by-step guide with progress chips",
     updated: "09-08-2026",
     created: "30-11-2025",
+    theme: {
+      ...LIGHT,
+      header: "#16A34A",
+      headerText: "#FFFFFF",
+      botBubble: "#F0FDF4",
+      userBubble: "#16A34A",
+      userText: "#FFFFFF",
+      agentName: "Onboarding Guide",
+      greeting: "Step 2 of 5 · Let's verify your identity.",
+      userMessage: "I have my Aadhaar ready",
+      reply: "Great! Upload the front side first.",
+      chips: ["Upload Aadhaar", "Skip for now"],
+    },
   },
   {
-    id: "loan-assist",
-    name: "Loan Assist",
-    description: "Finance pages with quick replies",
+    id: "high-contrast-a11y",
+    name: "High Contrast (Accessibility)",
+    description: "WCAG AAA contrast with larger text",
     updated: "29-07-2026",
     created: "14-10-2025",
+    theme: {
+      header: "#000000",
+      headerText: "#FDE047",
+      surface: "#000000",
+      botBubble: "#FFFFFF",
+      botText: "#000000",
+      userBubble: "#FDE047",
+      userText: "#000000",
+      border: "#FFFFFF",
+      agentName: "Assistant",
+      greeting: "Hello. How can I help?",
+      userMessage: "Read my last statement",
+      reply: "Your last statement shows 3 transactions.",
+    },
   },
   {
-    id: "high-contrast",
-    name: "High Contrast",
-    description: "Accessible high-contrast theme",
+    id: "partner-white-label",
+    name: "Partner Portal – White Label",
+    description: "Neutral styling for co-branded partner sites",
     updated: "20-07-2026",
     created: "02-10-2025",
+    theme: {
+      ...LIGHT,
+      header: "#0EA5E9",
+      headerText: "#FFFFFF",
+      userBubble: "#0EA5E9",
+      userText: "#FFFFFF",
+      agentName: "Partner Desk",
+      greeting: "Welcome to the partner portal.",
+      userMessage: "Track lead KX-2041",
+      reply: "Lead KX-2041 is in underwriting since 10:42 AM.",
+    },
   },
 ];
+
+function ChatWidgetPreview({ bot, domain }: { bot: VisualBot; domain: string }) {
+  const t = bot.theme;
+  const soft = (color: string, amount: number) =>
+    `color-mix(in srgb, ${color} ${amount}%, transparent)`;
+  const isLightHeader = t.header.toUpperCase() === "#FFFFFF";
+  const botRow = (text: string) => (
+    <div className="flex items-end gap-1.5">
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: t.userBubble, color: t.userText }}
+      >
+        <Bot className="h-2.5 w-2.5" />
+      </span>
+      <p
+        className="max-w-[84%] rounded-2xl rounded-bl-[5px] px-2.5 py-[7px] text-[10.5px] leading-[1.45]"
+        style={{ backgroundColor: t.botBubble, color: t.botText }}
+      >
+        {text}
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="w-[344px] overflow-hidden rounded-[18px] bg-white shadow-[0_32px_64px_-24px_rgba(15,23,42,0.45),0_12px_24px_-12px_rgba(15,23,42,0.2)] ring-1 ring-slate-900/5">
+      <style>{`
+        @keyframes cw-pop { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+        .cw-pop { transform-origin: bottom right; animation: cw-pop 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+        @media (prefers-reduced-motion: reduce) { .cw-pop { animation: none; } }
+      `}</style>
+      <div className="flex h-8 items-center gap-2 border-b border-slate-100 bg-white px-3">
+        <span className="flex gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-slate-200" />
+          <span className="h-2 w-2 rounded-full bg-slate-200" />
+          <span className="h-2 w-2 rounded-full bg-slate-200" />
+        </span>
+        <span className="mx-auto flex h-[18px] max-w-[55%] items-center gap-1 rounded-full bg-slate-50 px-2.5 text-[9.5px] font-medium text-slate-500 ring-1 ring-slate-200/70">
+          <span className="h-1 w-1 shrink-0 rounded-full bg-emerald-400" />
+          <span className="truncate">{domain || "your-website.com"}</span>
+        </span>
+        <span className="w-[42px]" />
+      </div>
+
+      <div
+        className="relative flex flex-col items-end gap-2.5 px-4 pb-4 pt-10"
+        style={{
+          backgroundColor: "#F8FAFC",
+          backgroundImage: `radial-gradient(70% 60% at 90% 100%, ${soft(t.userBubble, 16)}, transparent 70%)`,
+        }}
+      >
+        <div className="absolute left-4 top-5 w-[96px] space-y-2.5 opacity-60" aria-hidden="true">
+          <span className="block h-2 w-12 rounded-full bg-slate-200" />
+          <span className="block h-3.5 w-24 rounded-md bg-slate-200/90" />
+          <span className="block h-2 w-20 rounded-full bg-slate-200/70" />
+          <span className="block h-2 w-16 rounded-full bg-slate-200/70" />
+          <span
+            className="block h-5 w-16 rounded-md"
+            style={{ backgroundColor: soft(t.userBubble, 30) }}
+          />
+          <span className="block h-16 w-24 rounded-lg bg-white shadow-sm ring-1 ring-slate-100" />
+        </div>
+
+        <div
+          className="cw-pop relative w-[216px] overflow-hidden rounded-[18px]"
+          style={{
+            backgroundColor: t.surface,
+            boxShadow: `0 0 0 1px ${soft(t.border, 85)}, 0 20px 40px -16px rgba(15,23,42,0.35), 0 4px 10px -4px rgba(15,23,42,0.12)`,
+          }}
+        >
+          <div
+            className="flex items-center gap-2 px-3 py-2.5"
+            style={{
+              backgroundColor: t.header,
+              color: t.headerText,
+              borderBottom: isLightHeader ? `1px solid ${t.border}` : "none",
+            }}
+          >
+            <span
+              className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: isLightHeader ? t.userBubble : soft(t.headerText, 18),
+                color: isLightHeader ? t.userText : t.headerText,
+              }}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              <span
+                className="absolute -bottom-px -right-px h-2 w-2 rounded-full bg-emerald-400"
+                style={{ boxShadow: `0 0 0 1.5px ${t.header}` }}
+              />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11.5px] font-semibold leading-tight">
+                {t.agentName}
+              </span>
+              <span className="block truncate text-[9.5px] opacity-70">
+                Usually replies instantly
+              </span>
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1.5 px-2.5 pb-2.5 pt-2">
+            <span
+              className="self-center text-[8.5px] font-medium uppercase tracking-wider"
+              style={{ color: t.botText, opacity: 0.4 }}
+            >
+              Today
+            </span>
+            {botRow(t.greeting)}
+            <div className="flex flex-col items-end gap-0.5">
+              <p
+                className="max-w-[80%] rounded-2xl rounded-br-[5px] px-2.5 py-[7px] text-[10.5px] leading-[1.45]"
+                style={{ backgroundColor: t.userBubble, color: t.userText }}
+              >
+                {t.userMessage}
+              </p>
+              <span
+                className="flex items-center gap-0.5 text-[8px]"
+                style={{ color: t.botText, opacity: 0.4 }}
+              >
+                <CheckCheck className="h-2.5 w-2.5" />
+                Seen
+              </span>
+            </div>
+            {botRow(t.reply)}
+            {t.chips && (
+              <div className="flex flex-wrap justify-end gap-1 pt-0.5">
+                {t.chips.map((chip) => (
+                  <span
+                    key={chip}
+                    className="rounded-full px-2 py-[3px] text-[9.5px] font-medium"
+                    style={{
+                      color: t.userBubble,
+                      backgroundColor: soft(t.userBubble, 8),
+                      boxShadow: `inset 0 0 0 1px ${soft(t.userBubble, 40)}`,
+                    }}
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div
+            className="flex items-center gap-2 px-3 py-2"
+            style={{ borderTop: `1px solid ${soft(t.border, 85)}`, color: t.botText }}
+          >
+            <span className="flex-1 truncate text-[10px] opacity-40">Write a message…</span>
+            <Paperclip className="h-3 w-3 shrink-0 opacity-35" />
+            <span
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: t.userBubble, color: t.userText }}
+            >
+              <SendHorizontal className="h-2.5 w-2.5" />
+            </span>
+          </div>
+        </div>
+
+        <span
+          className="flex h-10 w-10 items-center justify-center rounded-full"
+          style={{
+            backgroundColor: t.userBubble,
+            color: t.userText,
+            boxShadow: `0 10px 20px -8px ${soft(t.userBubble, 70)}, 0 0 0 1px ${soft(t.border, 40)}`,
+          }}
+          aria-hidden="true"
+        >
+          <X className="h-4 w-4" />
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const WEBSITE_DEPLOYMENTS = [
   {
@@ -1149,86 +1479,76 @@ function WebsiteDeploymentConfiguration({
   onSelectIntegration: () => void;
 }) {
   const connected = Boolean(assignedApi);
-  const badge = connected
-    ? { label: "Connected", className: "bg-emerald-50 text-emerald-700 ring-emerald-100" }
-    : { label: "Required to deploy", className: "bg-amber-50 text-amber-700 ring-amber-100" };
-
-  const description = connected
-    ? "This workflow reads customer context through the integration below."
-    : "Select a published integration to give this workflow access to customer context.";
 
   return (
     <div className="relative overflow-hidden bg-card">
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-0 w-2/5 bg-gradient-to-r to-transparent",
-          connected ? "from-emerald-100/70" : "from-amber-100/70",
+          "pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r to-transparent",
+          connected ? "from-emerald-50" : "from-amber-50",
         )}
       />
-      <div className="relative flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-              connected ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700",
-            )}
-          >
-            {connected ? (
-              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <Database className="h-4 w-4" aria-hidden="true" />
-            )}
-          </span>
+      <div className="relative flex items-center gap-3 px-4 py-2.5">
+        <span
+          className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+            connected ? "bg-emerald-100/70 text-emerald-700" : "bg-amber-100/70 text-amber-700",
+          )}
+          aria-hidden="true"
+        >
+          {connected ? (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : (
+            <Database className="h-3.5 w-3.5" />
+          )}
+        </span>
 
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-[13px] font-semibold text-foreground">Connect customer data</h3>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
-                  badge.className,
-                )}
-              >
-                {badge.label}
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-              For <span className="font-medium text-foreground">{deployment.name}</span>{" "}
-              <span className="font-mono text-[11px]">v{deployment.version}</span>
-            </p>
-            <p className="mt-1.5 max-w-xl text-[11.5px] leading-relaxed text-muted-foreground">
-              {description}
-            </p>
-
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 text-[12.5px]">
+            <span className="font-semibold text-foreground">Customer data</span>
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset",
+                connected
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                  : "bg-amber-50 text-amber-700 ring-amber-100",
+              )}
+            >
+              {connected ? "Connected" : "Required to deploy"}
+            </span>
+            <span className="truncate text-[11.5px] text-muted-foreground">
+              for <span className="font-mono">v{deployment.version}</span>
+            </span>
+          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
             {assignedApi ? (
-              <div className="mt-2.5 inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted/25 px-2.5 py-1.5">
-                <span className="rounded bg-foreground/90 px-1.5 py-0.5 text-[9px] font-semibold text-background">
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <span className="rounded bg-foreground/90 px-1 py-px text-[9px] font-semibold text-background">
                   {assignedApi.method}
                 </span>
-                <span className="truncate text-[11.5px] font-medium text-foreground">
-                  {assignedApi.name}
-                </span>
-                <span className="hidden truncate font-mono text-[10.5px] text-muted-foreground sm:inline">
+                <span className="truncate font-medium text-foreground">{assignedApi.name}</span>
+                <span className="hidden truncate font-mono text-[10.5px] sm:inline">
                   {assignedApi.path}
                 </span>
-              </div>
-            ) : (
-              deployment.capabilities.length > 0 && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                    Uses
+              </span>
+            ) : deployment.capabilities.length > 0 ? (
+              <>
+                <span>Needs</span>
+                {deployment.capabilities.map((capability) => (
+                  <span
+                    key={capability}
+                    className="rounded border border-border bg-card px-1 py-px text-[10px] font-medium text-foreground"
+                  >
+                    {capability}
                   </span>
-                  {deployment.capabilities.map((capability) => (
-                    <span
-                      key={capability}
-                      className="rounded-md border border-border bg-muted/25 px-1.5 py-0.5 text-[10px] font-medium text-foreground"
-                    >
-                      {capability}
-                    </span>
-                  ))}
-                </div>
-              )
+                ))}
+                <span className="truncate">access to customer context</span>
+              </>
+            ) : (
+              <span className="truncate">
+                Choose an integration to give this workflow customer context.
+              </span>
             )}
           </div>
         </div>
@@ -1238,14 +1558,14 @@ function WebsiteDeploymentConfiguration({
           onClick={onSelectIntegration}
           aria-label={`${connected ? "Change" : "Choose"} customer data integration for version ${deployment.version}`}
           className={cn(
-            "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 self-start rounded-lg px-3.5 text-[11.5px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35 sm:self-center",
+            "inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-3 text-[12px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
             connected
               ? "border border-border bg-card text-foreground hover:bg-muted/40"
               : "bg-[#B22257] text-white shadow-sm hover:bg-[#971D49]",
           )}
         >
-          {connected ? "Change integration" : "Choose integration"}
-          {!connected && <ArrowRight className="h-3 w-3" aria-hidden="true" />}
+          {connected ? "Change" : "Choose integration"}
+          {!connected && <ArrowRight className="h-3 w-3" />}
         </button>
       </div>
     </div>
@@ -1253,73 +1573,153 @@ function WebsiteDeploymentConfiguration({
 }
 
 function VersionsFillerIllustration({ className }: { className?: string }) {
+  const brand = "#B22257";
+  const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
   return (
     <svg
-      viewBox="0 0 240 92"
+      viewBox="0 0 280 136"
       fill="none"
       aria-hidden="true"
-      className={cn("h-auto max-w-full shrink-0", className)}
+      className={cn("h-auto max-w-full shrink-0 overflow-visible", className)}
     >
+      <style>{`
+        .vf-float { animation: vf-float 3.2s ease-in-out infinite; }
+        .vf-flow { stroke-dasharray: 2 3; animation: vf-flow 1.4s linear infinite; }
+        @keyframes vf-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+        @keyframes vf-flow { to { stroke-dashoffset: -10; } }
+        @media (prefers-reduced-motion: reduce) { .vf-float, .vf-flow { animation: none; } }
+      `}</style>
       <defs>
-        <linearGradient id="vf-fade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="white" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="white" stopOpacity="0.35" />
+        <filter id="vf-shadow" x="-20%" y="-40%" width="140%" height="200%">
+          <feDropShadow dx="0" dy="6" stdDeviation="7" floodColor="#0F172A" floodOpacity="0.08" />
+          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#0F172A" floodOpacity="0.06" />
+        </filter>
+        <linearGradient id="vf-bar" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={brand} stopOpacity="0.75" />
+          <stop offset="100%" stopColor={brand} />
         </linearGradient>
-        <mask id="vf-mask">
-          <rect width="240" height="60" fill="url(#vf-fade)" />
-        </mask>
       </defs>
 
-      <g mask="url(#vf-mask)">
-        {[4, 32].map((y) => (
-          <g key={y}>
-            <rect
-              x="12.5"
-              y={y + 0.5}
-              width="215"
-              height="22"
-              rx="6"
-              className="fill-card stroke-border"
-            />
-            <circle cx="25" cy={y + 11.5} r="4" className="stroke-border" />
-            <rect x="36" y={y + 9.5} width="70" height="4" rx="2" className="fill-muted" />
-            <rect x="122" y={y + 9.5} width="22" height="4" rx="2" className="fill-muted/70" />
-            <rect x="156" y={y + 6} width="28" height="11" rx="5.5" className="fill-muted/60" />
-            <rect x="196" y={y + 6} width="22" height="11" rx="3" className="fill-muted/60" />
-          </g>
-        ))}
+      <rect
+        x="50"
+        y="6"
+        width="180"
+        height="28"
+        rx="9"
+        fill="#FFFFFF"
+        stroke="#E7E9EE"
+        opacity="0.55"
+      />
+      <rect x="66" y="16.5" width="40" height="5" rx="2.5" fill="#E7E9EE" opacity="0.7" />
+      <rect
+        x="36"
+        y="20"
+        width="208"
+        height="32"
+        rx="10"
+        fill="#FFFFFF"
+        stroke="#E7E9EE"
+        opacity="0.85"
+      />
+      <rect x="52" y="32.5" width="46" height="5" rx="2.5" fill="#E7E9EE" />
+      <rect x="196" y="30" width="34" height="10" rx="5" fill="#F1F2F5" />
+
+      <g filter="url(#vf-shadow)">
+        <rect x="22" y="38" width="236" height="44" rx="12" fill="#FFFFFF" />
+        <rect x="22.5" y="38.5" width="235" height="43" rx="11.5" stroke="#E4E6EB" />
+      </g>
+      <circle cx="41" cy="60" r="5.5" stroke={brand} strokeWidth="1.25" fill="#FFFFFF" />
+      <circle cx="41" cy="60" r="2.6" fill={brand} />
+      <text x="54" y="63.2" fontSize="9" fontWeight="600" fill="#1E293B" style={mono}>
+        v2.0
+      </text>
+      <rect x="92" y="57" width="104" height="6" rx="3" fill="#F1F2F5" />
+      <rect x="92" y="57" width="52" height="6" rx="3" fill="url(#vf-bar)" />
+      <rect
+        x="206"
+        y="51"
+        width="40"
+        height="18"
+        rx="9"
+        fill="#FDF3F7"
+        stroke={brand}
+        strokeOpacity="0.25"
+      />
+      <text
+        x="226"
+        y="63"
+        fontSize="8.5"
+        fontWeight="700"
+        textAnchor="middle"
+        fill={brand}
+        style={mono}
+      >
+        50%
+      </text>
+
+      <path
+        d="M226 82 C226 88 226 90 226 96"
+        stroke={brand}
+        strokeOpacity="0.45"
+        strokeWidth="1.25"
+        className="vf-flow"
+      />
+
+      <g className="vf-float">
+        <rect
+          x="22.5"
+          y="96.5"
+          width="235"
+          height="33"
+          rx="11.5"
+          fill="#FDF3F7"
+          stroke={brand}
+          strokeOpacity="0.55"
+          strokeDasharray="4 3"
+        />
+        <circle cx="41" cy="113" r="7" fill={brand} />
+        <path
+          d="M41 109.6v6.8M37.6 113h6.8"
+          stroke="#FFFFFF"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+        <text x="54" y="116" fontSize="9" fontWeight="600" fill={brand}>
+          New version
+        </text>
+        <rect x="120" y="110" width="76" height="6" rx="3" fill={brand} fillOpacity="0.12" />
+        <rect x="120" y="110" width="19" height="6" rx="3" fill={brand} fillOpacity="0.35" />
+        <rect
+          x="206.5"
+          y="104.5"
+          width="39"
+          height="17"
+          rx="8.5"
+          fill="#FFFFFF"
+          stroke={brand}
+          strokeOpacity="0.45"
+          strokeDasharray="3 2"
+        />
+        <text
+          x="226"
+          y="116"
+          fontSize="8.5"
+          fontWeight="700"
+          textAnchor="middle"
+          fill={brand}
+          fillOpacity="0.8"
+          style={mono}
+        >
+          25%
+        </text>
       </g>
 
-      <rect
-        x="12.5"
-        y="64.5"
-        width="215"
-        height="22"
-        rx="6"
-        fill="#FDF3F7"
-        stroke="#B22257"
-        strokeOpacity="0.45"
-        strokeDasharray="4 3"
-      />
-      <circle cx="25" cy="75.5" r="4" stroke="#B22257" strokeOpacity="0.45" />
-      <rect x="36" y="73.5" width="70" height="4" rx="2" fill="#B22257" fillOpacity="0.18" />
-      <rect
-        x="156"
-        y="70"
-        width="28"
-        height="11"
-        rx="5.5"
-        className="fill-card"
-        stroke="#B22257"
-        strokeOpacity="0.45"
-      />
       <path
-        d="M166 78l.6-2.4 4.6-4.6 1.8 1.8-4.6 4.6-2.4.6z"
-        stroke="#B22257"
-        strokeWidth="1"
-        strokeLinejoin="round"
+        d="M266 92 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6 z"
+        fill={brand}
+        fillOpacity="0.85"
       />
-      <path d="M207 71.5v8M203 75.5h8" stroke="#B22257" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="12" cy="44" r="2" fill={brand} fillOpacity="0.25" />
     </svg>
   );
 }
@@ -1400,6 +1800,225 @@ function WorkflowEmptyIllustration() {
   );
 }
 
+function useEasedNumber(target: number) {
+  const [display, setDisplay] = useState(target);
+  const displayRef = useRef(target);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      displayRef.current = target;
+      setDisplay(target);
+      return;
+    }
+    let frame = 0;
+    const step = () => {
+      const diff = target - displayRef.current;
+      if (Math.abs(diff) < 0.05) {
+        displayRef.current = target;
+        setDisplay(target);
+        return;
+      }
+      displayRef.current += diff * 0.2;
+      setDisplay(displayRef.current);
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
+  return display;
+}
+
+function AllocationControl({
+  value,
+  onChange,
+  current,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  current: number;
+}) {
+  const display = useEasedNumber(value);
+  const [dragging, setDragging] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(String(value));
+  const holdRef = useRef<{ timeout?: number; interval?: number }>({});
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+
+  const stopHold = () => {
+    window.clearTimeout(holdRef.current.timeout);
+    window.clearInterval(holdRef.current.interval);
+  };
+  useEffect(() => stopHold, []);
+  const startHold = (delta: number) => {
+    onChange(clamp(valueRef.current + delta));
+    stopHold();
+    holdRef.current.timeout = window.setTimeout(() => {
+      holdRef.current.interval = window.setInterval(() => {
+        onChange(clamp(valueRef.current + delta));
+      }, 55);
+    }, 380);
+  };
+  const commit = () => {
+    setEditing(false);
+    const parsed = Number.parseInt(text, 10);
+    onChange(Number.isNaN(parsed) ? value : clamp(parsed));
+  };
+  const delta = value - (Number.isNaN(current) ? value : current);
+  const stepButton =
+    "flex h-full w-8 items-center justify-center text-muted-foreground transition hover:bg-muted/60 hover:text-foreground active:scale-90 disabled:cursor-not-allowed disabled:opacity-35";
+
+  return (
+    <div className="mt-5 rounded-xl border border-border bg-muted/20 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <label
+            htmlFor="deployment-allocation"
+            className="text-[12.5px] font-medium text-foreground"
+          >
+            Traffic allocation
+          </label>
+          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+            Currently {Number.isNaN(current) ? "—" : `${current}%`}
+            {delta !== 0 && (
+              <span
+                className={cn(
+                  "ml-1.5 rounded-full px-1.5 py-px text-[10.5px] font-semibold tabular-nums",
+                  delta > 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700",
+                )}
+              >
+                {delta > 0 ? "+" : ""}
+                {delta}%
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex h-9 items-center overflow-hidden rounded-lg border border-border bg-card shadow-sm focus-within:border-[#B22257]/40 focus-within:ring-2 focus-within:ring-[#B22257]/10">
+          <button
+            type="button"
+            aria-label="Decrease allocation"
+            disabled={value <= 0}
+            onPointerDown={() => startHold(-1)}
+            onPointerUp={stopHold}
+            onPointerLeave={stopHold}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onChange(clamp(value - 1));
+              }
+            }}
+            className={stepButton}
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <span className="flex h-full items-center border-x border-border px-1">
+            <input
+              id="deployment-allocation-number"
+              inputMode="numeric"
+              value={editing ? text : String(Math.round(display))}
+              onFocus={(event) => {
+                setEditing(true);
+                setText(String(value));
+                requestAnimationFrame(() => event.target.select());
+              }}
+              onChange={(event) => setText(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
+              onBlur={commit}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                  event.preventDefault();
+                  const step = (event.shiftKey ? 10 : 1) * (event.key === "ArrowUp" ? 1 : -1);
+                  const next = clamp(value + step);
+                  onChange(next);
+                  setText(String(next));
+                }
+              }}
+              className="h-full w-10 bg-transparent text-right text-[14px] font-semibold tabular-nums text-foreground outline-none"
+              aria-label="Traffic allocation percentage"
+            />
+            <span className="pl-0.5 text-[12px] font-medium text-muted-foreground">%</span>
+          </span>
+          <button
+            type="button"
+            aria-label="Increase allocation"
+            disabled={value >= 100}
+            onPointerDown={() => startHold(1)}
+            onPointerUp={stopHold}
+            onPointerLeave={stopHold}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onChange(clamp(value + 1));
+              }
+            }}
+            className={stepButton}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="relative mx-2 mt-5 h-6">
+        <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-[#ECEDF0]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#D44A7E] to-[#B22257]"
+            style={{ width: `${display}%` }}
+          />
+        </div>
+        {[25, 50, 75].map((tick) => (
+          <span
+            key={tick}
+            className={cn(
+              "absolute top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors",
+              display >= tick ? "bg-white/70" : "bg-slate-300",
+            )}
+            style={{ left: `${tick}%` }}
+            aria-hidden="true"
+          />
+        ))}
+        <input
+          id="deployment-allocation"
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          onPointerDown={() => setDragging(true)}
+          onPointerUp={() => setDragging(false)}
+          onBlur={() => setDragging(false)}
+          aria-valuetext={`${value}%`}
+          className="peer absolute -inset-x-2 inset-y-0 z-10 w-[calc(100%+1rem)] cursor-pointer opacity-0"
+        />
+        <span
+          className={cn(
+            "pointer-events-none absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#B22257] shadow-[0_2px_6px_rgba(178,34,87,0.35)] transition-[transform,box-shadow] duration-150 peer-hover:scale-110 peer-focus-visible:ring-4 peer-focus-visible:ring-[#B22257]/20",
+            dragging && "scale-[1.18] shadow-[0_4px_14px_rgba(178,34,87,0.45)]",
+          )}
+          style={{ left: `${display}%` }}
+          aria-hidden="true"
+        />
+      </div>
+
+      <div className="mx-2 mt-2 flex justify-between">
+        {[0, 25, 50, 75, 100].map((tick) => (
+          <button
+            key={tick}
+            type="button"
+            onClick={() => onChange(tick)}
+            className={cn(
+              "-mx-1.5 rounded px-1.5 text-[10.5px] tabular-nums transition hover:text-[#B22257]",
+              value === tick ? "font-semibold text-[#B22257]" : "text-muted-foreground",
+            )}
+          >
+            {tick}%
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WebsiteConfigurationView({
   row,
   deploymentSource,
@@ -1435,7 +2054,24 @@ function WebsiteConfigurationView({
   const userType = row.userType ?? "Guest User";
   const [logoName, setLogoName] = useState(row.logoName ?? "");
   const [logoUrl, setLogoUrl] = useState(row.logoUrl ?? "");
-  const [visualBot, setVisualBot] = useState(row.visualBot ?? "testing");
+  const [visualBot, setVisualBot] = useState(row.visualBot ?? VISUAL_BOTS[0].id);
+  const [botPreview, setBotPreview] = useState<{
+    bot: VisualBot;
+    top: number;
+    left: number;
+  } | null>(null);
+  const showBotPreview = (bot: VisualBot, element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    const height = 460;
+    setBotPreview({
+      bot,
+      left: rect.right + 14,
+      top: Math.min(
+        Math.max(12, rect.top + rect.height / 2 - height / 2),
+        window.innerHeight - height - 12,
+      ),
+    });
+  };
   const [visualBotModalOpen, setVisualBotModalOpen] = useState(false);
   const [visualBotDraft, setVisualBotDraft] = useState("");
   const [visualBotQuery, setVisualBotQuery] = useState("");
@@ -1449,6 +2085,7 @@ function WebsiteConfigurationView({
   );
   const withHistory = row.versionHistory !== "none";
   const [addedVersions, setAddedVersions] = useState<WebsiteDeployment[]>([]);
+  const [deletedVersionIds, setDeletedVersionIds] = useState<string[]>([]);
   const deployments = useMemo(() => {
     const [current, ...history] = deploymentsFor(deploymentSource, withHistory);
     if (!current) return [];
@@ -1456,8 +2093,22 @@ function WebsiteConfigurationView({
       .filter((version) => version.flowId === deploymentSource?.id)
       .reverse();
     const percent = (deployment: WebsiteDeployment) => Number.parseInt(deployment.deployment) || 0;
-    return [current, ...added, ...history].sort((a, b) => percent(b) - percent(a));
-  }, [addedVersions, deploymentSource, withHistory]);
+    return [current, ...added, ...history]
+      .filter((deployment) => !deletedVersionIds.includes(deployment.id))
+      .sort((a, b) => percent(b) - percent(a));
+  }, [addedVersions, deploymentSource, withHistory, deletedVersionIds]);
+  const [versionMenu, setVersionMenu] = useState<{
+    deployment: WebsiteDeployment;
+    top: number;
+    left: number;
+  } | null>(null);
+  const [deleteVersionTarget, setDeleteVersionTarget] = useState<WebsiteDeployment | null>(null);
+  useEffect(() => {
+    if (!versionMenu) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setVersionMenu(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [versionMenu]);
   const [selectedDeployment, setSelectedDeployment] = useState(row.selectedDeployment ?? "");
   const toggleDeployment = (id: string) =>
     setSelectedDeployment((current) => (current === id ? "" : id));
@@ -1847,6 +2498,10 @@ function WebsiteConfigurationView({
                           aria-checked={selected}
                           aria-label={`Select ${bot.name}`}
                           data-visual-bot={bot.id}
+                          onMouseEnter={(event) => showBotPreview(bot, event.currentTarget)}
+                          onMouseLeave={() => setBotPreview(null)}
+                          onFocus={(event) => showBotPreview(bot, event.currentTarget)}
+                          onBlur={() => setBotPreview(null)}
                           className={cn(
                             "group flex w-full items-start gap-3 px-3.5 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#B22257]/35",
                             selected
@@ -2017,7 +2672,7 @@ function WebsiteConfigurationView({
                 <div className="flex flex-1 flex-col lg:relative lg:min-h-[260px]">
                   <div className="relative flex min-h-fit flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card lg:absolute lg:inset-0 lg:min-h-0">
                     <div className="min-h-[124px] shrink overflow-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      <table className="w-full min-w-[540px] table-fixed whitespace-nowrap text-left text-[12.5px] min-[1400px]:min-w-[640px]">
+                      <table className="w-full min-w-[588px] table-fixed whitespace-nowrap text-left text-[12.5px] min-[1400px]:min-w-[688px]">
                         <thead className="sticky top-0 z-10 bg-card text-[12px] text-muted-foreground shadow-[inset_0_-1px_0_var(--color-border)] [&_th]:bg-muted/30">
                           <tr>
                             <th className="w-14 px-3 py-2.5 font-medium">#</th>
@@ -2028,6 +2683,9 @@ function WebsiteConfigurationView({
                             <th className="w-28 px-3 py-2.5 font-medium">Allocation</th>
                             <th className="w-48 px-3 py-2.5 font-medium">Integration</th>
                             <th className="w-28 px-3 py-2.5 font-medium">Status</th>
+                            <th className="w-12 px-2 py-2.5">
+                              <span className="sr-only">Actions</span>
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2189,6 +2847,37 @@ function WebsiteConfigurationView({
                                       </button>
                                     )}
                                   </td>
+                                  <td className="px-2 py-2.5">
+                                    <button
+                                      type="button"
+                                      aria-label={`More actions for version ${deployment.version}`}
+                                      aria-haspopup="menu"
+                                      aria-expanded={versionMenu?.deployment.id === deployment.id}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        setVersionMenu(
+                                          versionMenu?.deployment.id === deployment.id
+                                            ? null
+                                            : {
+                                                deployment,
+                                                top: Math.min(
+                                                  rect.bottom + 4,
+                                                  window.innerHeight - 120,
+                                                ),
+                                                left: rect.right - 208,
+                                              },
+                                        );
+                                      }}
+                                      className={cn(
+                                        "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/35",
+                                        versionMenu?.deployment.id === deployment.id &&
+                                          "bg-muted text-foreground",
+                                      )}
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </button>
+                                  </td>
                                 </tr>
                               </Fragment>
                             );
@@ -2213,7 +2902,7 @@ function WebsiteConfigurationView({
                       )}
                     <div className="min-h-0 flex-1 border-t border-border [container-type:size]">
                       <div className="hidden h-full items-center justify-center gap-5 px-6 [@container(min-height:96px)]:flex [@container(min-height:200px)]:flex-col [@container(min-height:200px)]:gap-3">
-                        <VersionsFillerIllustration className="w-[150px] [@container(min-height:200px)]:w-[220px]" />
+                        <VersionsFillerIllustration className="w-[168px] [@container(min-height:200px)]:w-[248px]" />
                         <div className="text-left [@container(min-height:200px)]:text-center">
                           <p className="text-[13px] font-semibold text-foreground">
                             Room for more versions
@@ -2280,6 +2969,154 @@ function WebsiteConfigurationView({
         </footer>
       </section>
 
+      {versionMenu &&
+        createPortal(
+          (() => {
+            const target = versionMenu.deployment;
+            const isLive = liveByFlow[target.flowId]?.deploymentId === target.id;
+            const isLast = deployments.length <= 1;
+            const blocked = isLive || isLast;
+            return (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close menu"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onClick={() => setVersionMenu(null)}
+                />
+                <div
+                  role="menu"
+                  className="fixed z-50 w-52 rounded-xl border border-border bg-card p-1 shadow-lg animate-fade-up"
+                  style={{ top: versionMenu.top, left: versionMenu.left }}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={blocked}
+                    onClick={() => {
+                      setVersionMenu(null);
+                      setDeleteVersionTarget(target);
+                    }}
+                    className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent"
+                  >
+                    <Trash2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Delete version
+                      {blocked && (
+                        <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                          {isLive
+                            ? "Live versions can't be deleted."
+                            : "A workflow needs at least one version."}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </div>
+              </>
+            );
+          })(),
+          document.body,
+        )}
+
+      {deleteVersionTarget &&
+        (() => {
+          const target = deleteVersionTarget;
+          const allocation = deploymentAllocations[target.id] ?? target.deployment;
+          const api = INTEGRATION_APIS.find((item) => item.id === apiAssignments[target.id]);
+          const close = () => setDeleteVersionTarget(null);
+          return (
+            <ModalShell onClose={close}>
+              <div className="flex items-start gap-3.5 pr-6">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600 ring-1 ring-red-100">
+                  <Trash2 className="h-[18px] w-[18px]" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-[16px] font-semibold leading-tight text-foreground">
+                    Delete version v{target.version}?
+                  </h2>
+                  <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                    It will be removed from{" "}
+                    <span className="font-medium text-foreground">{websiteName}</span>. This
+                    can&apos;t be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-xl border border-border">
+                <div className="flex items-center gap-3 bg-muted/25 px-3.5 py-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-card text-muted-foreground ring-1 ring-border">
+                    <Workflow className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-foreground">
+                      {target.name}
+                    </p>
+                    <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                      Version <span className="font-mono">v{target.version}</span>
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-card px-2.5 py-1 text-[12px] font-semibold tabular-nums text-foreground ring-1 ring-border">
+                    {allocation}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-border px-3.5 py-2.5 text-[12px]">
+                  <span className="text-muted-foreground">Integration</span>
+                  {api ? (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {api.name}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      Not configured
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Its allocation and integration settings are removed with it.
+              </p>
+
+              <div className="mt-6 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={close}
+                  autoFocus
+                  className="h-9 rounded-lg border border-border bg-card px-4 text-[13px] font-medium text-foreground transition hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B22257]/30"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeletedVersionIds((current) => [...current, target.id]);
+                    if (selectedDeployment === target.id) setSelectedDeployment("");
+                    close();
+                  }}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-red-600 px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-1"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete v{target.version}
+                </button>
+              </div>
+            </ModalShell>
+          );
+        })()}
+
+      {botPreview &&
+        createPortal(
+          <div
+            className="pointer-events-none fixed z-50 animate-fade-up"
+            style={{ top: botPreview.top, left: botPreview.left }}
+          >
+            <ChatWidgetPreview bot={botPreview.bot} domain={domain} />
+          </div>,
+          document.body,
+        )}
+
       {allocationTarget && (
         <ModalShell onClose={() => setAllocationTarget(null)}>
           <div>
@@ -2294,49 +3131,13 @@ function WebsiteConfigurationView({
               version, and v{allocationTarget.version} stays as it is.
             </p>
 
-            <div className="mt-5 rounded-xl border border-border bg-muted/20 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <label
-                  htmlFor="deployment-allocation"
-                  className="text-[12px] font-medium text-foreground"
-                >
-                  Traffic allocation
-                </label>
-                <div className="flex h-9 items-center overflow-hidden rounded-lg border border-border bg-card">
-                  <input
-                    id="deployment-allocation-number"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={allocationDraft}
-                    onChange={(event) =>
-                      setAllocationDraft(
-                        Math.min(100, Math.max(0, Number(event.target.value) || 0)),
-                      )
-                    }
-                    className="h-full w-16 bg-transparent px-2 text-right text-[13px] font-semibold text-foreground outline-none"
-                    aria-label="Traffic allocation percentage"
-                  />
-                  <span className="pr-2 text-[12px] font-medium text-muted-foreground">%</span>
-                </div>
-              </div>
-              <input
-                id="deployment-allocation"
-                type="range"
-                min={0}
-                max={100}
-                value={allocationDraft}
-                onChange={(event) => setAllocationDraft(Number(event.target.value))}
-                className="mt-4 w-full accent-[#B22257]"
-              />
-              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-                <span>0%</span>
-                <span>25%</span>
-                <span>50%</span>
-                <span>75%</span>
-                <span>100%</span>
-              </div>
-            </div>
+            <AllocationControl
+              value={allocationDraft}
+              onChange={setAllocationDraft}
+              current={Number.parseInt(
+                deploymentAllocations[allocationTarget.id] ?? allocationTarget.deployment,
+              )}
+            />
 
             <div className="mt-6 flex items-center justify-end gap-2">
               <button

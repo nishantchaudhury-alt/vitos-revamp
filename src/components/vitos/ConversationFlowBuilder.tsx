@@ -49,6 +49,7 @@ import {
   RefreshCw,
   Rocket,
   Save,
+  Search,
   SlidersHorizontal,
   Sparkles,
   Star,
@@ -2112,6 +2113,95 @@ const WEBSITE_CONFIGURATIONS: WebsiteConfiguration[] = [
   },
 ];
 
+function WebsitesFillerIllustration({ className }: { className?: string }) {
+  const brand = "#C72B65";
+  return (
+    <svg
+      viewBox="0 0 280 150"
+      fill="none"
+      aria-hidden="true"
+      className={cn("h-auto max-w-full shrink-0 overflow-visible", className)}
+    >
+      <style>{`
+        .wf-float { animation: wf-float 3.4s ease-in-out infinite; }
+        .wf-ping { transform-origin: 232px 112px; animation: wf-ping 2.4s ease-out infinite; }
+        @keyframes wf-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        @keyframes wf-ping { 0% { opacity: 0.5; transform: scale(1); } 80%, 100% { opacity: 0; transform: scale(1.9); } }
+        @media (prefers-reduced-motion: reduce) { .wf-float, .wf-ping { animation: none; } }
+      `}</style>
+      <defs>
+        <filter id="wf-shadow" x="-20%" y="-30%" width="140%" height="170%">
+          <feDropShadow dx="0" dy="8" stdDeviation="9" floodColor="#0F172A" floodOpacity="0.09" />
+          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#0F172A" floodOpacity="0.06" />
+        </filter>
+      </defs>
+
+      <g opacity="0.6">
+        <rect x="14.5" y="22.5" width="118" height="84" rx="10" fill="#FFFFFF" stroke="#E4E6EB" />
+        <path d="M14.5 40.5h118" stroke="#E4E6EB" />
+        <circle cx="25" cy="31.5" r="2" fill="#E4E6EB" />
+        <circle cx="32" cy="31.5" r="2" fill="#E4E6EB" />
+        <rect x="26" y="52" width="58" height="6" rx="3" fill="#EEF0F3" />
+        <rect x="26" y="64" width="84" height="4" rx="2" fill="#F1F2F5" />
+        <rect x="26" y="73" width="70" height="4" rx="2" fill="#F1F2F5" />
+        <rect x="26" y="85" width="30" height="10" rx="5" fill="#EEF0F3" />
+      </g>
+
+      <g filter="url(#wf-shadow)">
+        <rect x="70" y="12" width="148" height="108" rx="12" fill="#FFFFFF" />
+        <rect x="70.5" y="12.5" width="147" height="107" rx="11.5" stroke="#E4E6EB" />
+      </g>
+      <path d="M70.5 33.5h147" stroke="#EEF0F3" />
+      <circle cx="82" cy="23" r="2.4" fill="#FF5F57" />
+      <circle cx="90" cy="23" r="2.4" fill="#FEBC2E" />
+      <circle cx="98" cy="23" r="2.4" fill="#28C840" />
+      <rect x="124" y="18" width="60" height="10" rx="5" fill="#F4F5F7" />
+      <circle cx="131" cy="23" r="1.6" fill="#22C55E" />
+      <rect x="136" y="21.5" width="38" height="3" rx="1.5" fill="#D9DCE2" />
+      <rect x="84" y="46" width="70" height="7" rx="3.5" fill="#E9EBEF" />
+      <rect x="84" y="59" width="104" height="4" rx="2" fill="#F1F2F5" />
+      <rect x="84" y="68" width="88" height="4" rx="2" fill="#F1F2F5" />
+      <rect x="84" y="81" width="36" height="12" rx="6" fill={brand} fillOpacity="0.85" />
+      <rect x="126" y="81" width="36" height="12" rx="6" fill="#F4F5F7" />
+
+      <g className="wf-float">
+        <rect
+          x="168.5"
+          y="54.5"
+          width="98"
+          height="72"
+          rx="11.5"
+          fill="#FDF3F7"
+          stroke={brand}
+          strokeOpacity="0.5"
+          strokeDasharray="4 3"
+        />
+        <circle cx="217.5" cy="84" r="11" fill="#FFFFFF" stroke={brand} strokeOpacity="0.3" />
+        <path
+          d="M217.5 78.5v11M212 84h11"
+          stroke={brand}
+          strokeWidth="1.75"
+          strokeLinecap="round"
+        />
+        <rect x="192" y="104" width="51" height="5" rx="2.5" fill={brand} fillOpacity="0.18" />
+      </g>
+
+      <circle className="wf-ping" cx="232" cy="112" r="9" fill={brand} fillOpacity="0.35" />
+      <circle cx="232" cy="112" r="9" fill={brand} />
+      <path
+        d="M228 109.5h8a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-4.5l-2.5 2v-2h-1a1.5 1.5 0 0 1-1.5-1.5v-3a1.5 1.5 0 0 1 1.5-1.5z"
+        fill="#FFFFFF"
+      />
+      <path
+        d="M262 30 l1.6 3.9 3.9 1.6 -3.9 1.6 -1.6 3.9 -1.6 -3.9 -3.9 -1.6 3.9 -1.6 z"
+        fill={brand}
+        fillOpacity="0.8"
+      />
+      <circle cx="54" cy="128" r="2" fill={brand} fillOpacity="0.25" />
+    </svg>
+  );
+}
+
 function WebsiteDeploymentSettings({
   agent,
   onBack,
@@ -2124,53 +2214,89 @@ function WebsiteDeploymentSettings({
   const [selectedWebsite, setSelectedWebsite] = useState<string | null>(null);
   const [websiteConfigurations, setWebsiteConfigurations] = useState(WEBSITE_CONFIGURATIONS);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
   const selected = websiteConfigurations.find((website) => website.id === selectedWebsite);
+  const prettyDomain = (domain: string) => domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const visibleWebsites = websiteConfigurations.filter((website) =>
+    `${website.name} ${website.domain}`.toLowerCase().includes(query.trim().toLowerCase()),
+  );
 
   const closeCreatePanel = () => setIsCreateOpen(false);
 
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-[#FAFAFA] p-4 sm:p-5">
-      <section className="mx-auto min-h-full w-full max-w-[1800px] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex h-14 items-center border-b border-border px-4">
+    <main className="flex min-h-0 flex-1 flex-col bg-[#FAFAFA] p-4 sm:p-5">
+      <section className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-5">
           <button
             type="button"
             onClick={onBack}
             aria-label="Back to flow builder"
-            className="inline-flex items-center gap-2 text-[14px] font-medium text-foreground transition hover:text-[#C72B65]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#C72B65] transition hover:bg-[#FDF3F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30"
           >
-            <ArrowLeft className="h-4 w-4 text-[#C72B65]" />
-            Deploy In Website
+            <ArrowLeft className="h-4 w-4" />
           </button>
+          <h1 className="text-[14px] font-semibold text-foreground">Deploy in website</h1>
+          <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-[#C72B65]/25 bg-[#FDF3F7] py-0.5 pl-1.5 pr-2.5 text-[11.5px] font-semibold text-[#A3214F]">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#C72B65] text-white">
+              <Workflow className="h-2.5 w-2.5" aria-hidden="true" />
+            </span>
+            <span className="truncate font-mono">{agent.name}</span>
+          </span>
         </div>
 
-        <div className="p-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-[13px] font-semibold text-[#333A50]">
-                Choose one Website configuration from your list
-              </h2>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Select where {agent.name} should be available to website visitors.
-              </p>
-            </div>
-            <span className="rounded-full border border-border bg-muted/20 px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
-              {websiteConfigurations.length} configurations
-            </span>
+        <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-6 pb-4 pt-6">
+          <div className="min-w-0">
+            <h2 className="text-[16px] font-semibold text-foreground">Choose a website</h2>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Pick where <span className="font-medium text-foreground">{agent.name}</span> should be
+              available to website visitors.
+            </p>
           </div>
+          <div className="flex items-center gap-2">
+            <label className="flex h-9 w-64 items-center gap-2 rounded-lg border border-border bg-card px-3 transition focus-within:border-[#C72B65]/40 focus-within:ring-2 focus-within:ring-[#C72B65]/10">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">Search websites</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by name or domain"
+                className="min-w-0 flex-1 bg-transparent text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/70"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsCreateOpen(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#C72B65]/40 bg-card px-3 text-[12.5px] font-semibold text-[#C72B65] transition hover:border-[#C72B65] hover:bg-[#FDF3F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create new website
+            </button>
+          </div>
+        </div>
 
-          <div className="mt-3 max-h-[300px] overflow-y-auto rounded-xl bg-[#FAFAFB] p-3 [scrollbar-color:#F2D6E1_transparent]">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                className="flex min-h-[128px] items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#C72B65] bg-card text-[13px] font-medium text-[#C72B65] transition hover:bg-[#FDF3F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30"
-              >
-                <Plus className="h-4 w-4" />
-                Create New
-              </button>
+        <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border">
+            <div className="grid shrink-0 grid-cols-[44px_minmax(0,1.3fr)_minmax(0,1fr)_160px] items-center border-b border-border bg-muted/30 px-2 py-2.5 text-[12px] font-medium text-muted-foreground">
+              <span>
+                <span className="sr-only">Select</span>
+              </span>
+              <span>Website</span>
+              <span>Domain</span>
+              <span className="flex items-center gap-2">
+                Active sessions
+                <span className="rounded-full bg-card px-1.5 text-[10.5px] ring-1 ring-border">
+                  {websiteConfigurations.length}
+                </span>
+              </span>
+            </div>
 
-              {websiteConfigurations.map((website) => {
+            <div
+              role="radiogroup"
+              aria-label="Website configurations"
+              className="min-h-0 shrink divide-y divide-border overflow-y-auto [scrollbar-width:thin]"
+            >
+              {visibleWebsites.map((website) => {
                 const checked = selectedWebsite === website.id;
                 return (
                   <button
@@ -2180,65 +2306,122 @@ function WebsiteDeploymentSettings({
                     aria-checked={checked}
                     onClick={() => setSelectedWebsite(website.id)}
                     className={cn(
-                      "relative min-h-[128px] rounded-xl border bg-card p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30",
+                      "group grid w-full grid-cols-[44px_minmax(0,1.3fr)_minmax(0,1fr)_160px] items-center px-2 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C72B65]/30",
                       checked
-                        ? "border-[#C72B65] shadow-[0_0_0_2px_rgba(199,43,101,0.10)]"
-                        : "border-border hover:border-[#C72B65]/35 hover:shadow-sm",
+                        ? "bg-[#FDF3F7]/60 shadow-[inset_2px_0_0_#C72B65]"
+                        : "hover:bg-muted/25",
                     )}
                   >
+                    <span className="flex justify-center">
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 items-center justify-center rounded-full border transition",
+                          checked
+                            ? "border-[#C72B65]"
+                            : "border-slate-300 bg-card group-hover:border-[#C72B65]/55",
+                        )}
+                        aria-hidden="true"
+                      >
+                        {checked && <span className="h-2 w-2 rounded-full bg-[#C72B65]" />}
+                      </span>
+                    </span>
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                        {website.logoUrl ? (
+                          <img
+                            src={website.logoUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <Globe2 className="h-4 w-4" />
+                        )}
+                      </span>
+                      <span className="truncate text-[13.5px] font-semibold text-foreground">
+                        {website.name}
+                      </span>
+                    </span>
                     <span
-                      className={cn(
-                        "absolute right-3 top-3 flex h-4 w-4 items-center justify-center rounded-full border",
-                        checked
-                          ? "border-[#C72B65] bg-[#C72B65] text-white"
-                          : "border-slate-300 bg-card",
-                      )}
+                      className="truncate pr-4 text-[12.5px] text-muted-foreground"
+                      title={website.domain}
                     >
-                      {checked && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                      {prettyDomain(website.domain) || "No link added"}
                     </span>
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                      <Globe2 className="h-4 w-4" />
+                    <span className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          website.sessions > 0 ? "bg-emerald-500" : "bg-slate-300",
+                        )}
+                        aria-hidden="true"
+                      />
+                      <span className="font-medium text-foreground">{website.sessions}</span>
+                      active {website.sessions === 1 ? "session" : "sessions"}
                     </span>
-                    <p className="mt-2 truncate pr-6 text-[15px] font-medium text-[#333A50]">
-                      {website.name}
-                    </p>
-                    <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
-                      {website.domain}
-                    </p>
-                    <div className="mt-2 border-t border-border pt-2 text-[12px] text-muted-foreground">
-                      <span className="font-medium text-blue-600">{website.sessions}</span> Active
-                      Sessions
-                    </div>
                   </button>
                 );
               })}
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <div className="min-w-0">
-              {selected ? (
-                <p className="truncate text-[11.5px] text-muted-foreground">
-                  Selected: <span className="font-semibold text-foreground">{selected.name}</span>
-                  <span className="mx-1.5">•</span>
-                  {selected.domain}
-                </p>
-              ) : (
-                <p className="text-[11.5px] text-muted-foreground">
-                  Select a website configuration to continue.
-                </p>
+              {visibleWebsites.length === 0 && (
+                <div className="flex flex-col items-center gap-1.5 px-6 py-10 text-center">
+                  <p className="text-[13.5px] font-semibold text-foreground">
+                    No websites match “{query}”
+                  </p>
+                  <p className="text-[12.5px] text-muted-foreground">
+                    Try a different name or domain, or create a new website.
+                  </p>
+                </div>
               )}
             </div>
-            <button
-              type="button"
-              disabled={!selectedWebsite}
-              onClick={() => selected && onNext(selected)}
-              className="inline-flex h-9 min-w-24 items-center justify-center gap-1.5 rounded-lg bg-[#C72B65] px-4 text-[12px] font-semibold text-white shadow-sm transition hover:bg-[#A92355] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
-            >
-              Next
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
+
+            <div className="min-h-0 flex-1 border-t border-border [container-type:size]">
+              <div className="hidden h-full items-center justify-center gap-6 px-6 [@container(min-height:120px)]:flex [@container(min-height:240px)]:flex-col [@container(min-height:240px)]:gap-4">
+                <WebsitesFillerIllustration className="w-[180px] [@container(min-height:240px)]:w-[260px]" />
+                <div className="max-w-sm text-left [@container(min-height:240px)]:text-center">
+                  <p className="text-[14px] font-semibold text-foreground">
+                    Reach visitors on more websites
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                    Add another website configuration to make {agent.name} available on a new
+                    domain.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateOpen(true)}
+                    className="mt-3 inline-flex items-center gap-1 text-[12.5px] font-semibold text-[#C72B65] transition hover:text-[#A92355]"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create new website
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-6 py-3.5">
+          {selected ? (
+            <p className="flex min-w-0 items-center gap-2 text-[12.5px] text-muted-foreground">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                <Globe2 className="h-3.5 w-3.5" />
+              </span>
+              <span className="truncate">
+                Deploying to <span className="font-semibold text-foreground">{selected.name}</span>
+                <span className="mx-1.5 text-border">•</span>
+                {prettyDomain(selected.domain)}
+              </span>
+            </p>
+          ) : (
+            <p className="text-[12.5px] text-muted-foreground">Select a website to continue.</p>
+          )}
+          <button
+            type="button"
+            disabled={!selectedWebsite}
+            onClick={() => selected && onNext(selected)}
+            className="inline-flex h-9 min-w-24 items-center justify-center gap-1.5 rounded-lg bg-[#C72B65] px-4 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-[#A92355] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
+          >
+            Next
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </section>
 
