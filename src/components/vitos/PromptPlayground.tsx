@@ -13,6 +13,7 @@ import {
   CornerDownRight,
   FlaskConical,
   GripVertical,
+  History,
   MessageSquare,
   MoreVertical,
   Pencil,
@@ -28,6 +29,20 @@ import { isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  RunHistoryPicker,
+  TestResultsView,
+  TestRunView,
+  caseScore,
+  casePassed,
+  completedRun,
+  outcomeFor,
+  runScore,
+  userTurns,
+  type RunMessage,
+  type RunRecord,
+  type RunStatus,
+} from "./PromptTestRun";
 
 const BRAND = "#C72B65";
 
@@ -110,11 +125,39 @@ const USE_CASE_LIBRARY: UseCase[] = [
   },
 ];
 
-type SavedCase = { item: UseCase; savedAt: number };
+type SavedCase = { item: UseCase; savedAt: number; result?: number };
+
+const SEED_RESULTS = [92, 88, 95, 76, 90, 84, 97, 81, 93, 86, 79, 91, 89, 94];
 
 const DAY = 24 * 60 * 60 * 1000;
 
 function seedSavedCases(): SavedCase[] {
+  return seedEntries().map((entry, i) => ({
+    ...entry,
+    result: SEED_RESULTS[i % SEED_RESULTS.length],
+  }));
+}
+
+function daysAgoAt(daysAgo: number, hour: number, minute: number) {
+  const date = new Date(Date.now() - daysAgo * DAY);
+  date.setHours(hour, minute, 0, 0);
+  return date.getTime();
+}
+
+function seedRuns(): RunRecord[] {
+  const savedItems = seedEntries().map((entry) => entry.item);
+  const pick = (ids: string[]) => savedItems.filter((item) => ids.includes(item.id));
+  return [
+    completedRun(
+      "run-seed-1",
+      pick(["saved-cibil", "saved-human", "saved-bank-change"]),
+      daysAgoAt(4, 11, 20),
+    ),
+    completedRun("run-seed-2", USE_CASE_LIBRARY.slice(0, 2), daysAgoAt(1, 16, 35)),
+  ];
+}
+
+function seedEntries(): SavedCase[] {
   const now = Date.now();
   const at = (daysAgo: number, hour: number, minute: number) => {
     const date = new Date(now - daysAgo * DAY);
@@ -333,7 +376,7 @@ const STAGES: Stage[] = [
 
 type PanelMode = "closed" | "generating" | "results" | "manual";
 
-export function PromptPlayground({ onBack }: { onBack: () => void }) {
+export function PromptPlayground({ active, onBack }: { active: boolean; onBack: () => void }) {
   const [model, setModel] = useState(MODELS[0].id);
   const [count, setCount] = useState(3);
   const [panel, setPanel] = useState<PanelMode>("closed");
@@ -347,6 +390,144 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const generating = panel === "generating";
+
+  const [view, setView] = useState<"cases" | "run" | "results">("cases");
+  const [runId, setRunId] = useState(0);
+  const [runCases, setRunCases] = useState<UseCase[]>([]);
+  const [runStatuses, setRunStatuses] = useState<Record<string, RunStatus>>({});
+  const [transcripts, setTranscripts] = useState<Record<string, RunMessage[]>>({});
+  const [typingId, setTypingId] = useState<string | null>(null);
+  const [messagesDone, setMessagesDone] = useState(0);
+  const [runDone, setRunDone] = useState(false);
+  const [runHistory, setRunHistory] = useState<RunRecord[]>(seedRuns);
+  const [selectedRunId, setSelectedRunId] = useState(
+    () => runHistory[runHistory.length - 1]?.id ?? "",
+  );
+  const liveRun = runId !== 0 && !runDone;
+  const selectedRun =
+    runHistory.find((record) => record.id === selectedRunId) ?? runHistory[runHistory.length - 1];
+  const runOptions = runHistory
+    .map((record, i) => ({
+      id: record.id,
+      title: `Run #${i + 1}`,
+      meta: `${dayLabel(record.finishedAt)}, ${new Date(record.finishedAt).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      })} · ${record.cases.length} ${record.cases.length === 1 ? "case" : "cases"}`,
+      score: runScore(record.cases),
+    }))
+    .reverse();
+  const selectRun = (id: string) => {
+    setSelectedRunId(id);
+    const record = runHistory.find((item) => item.id === id);
+    setExpandedRun(new Set(record?.cases[0] ? [record.cases[0].id] : []));
+  };
+  const [returned, setReturned] = useState(false);
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (active && added.length > 0) {
+      setReturned(true);
+      setView(liveRun ? "run" : "cases");
+    }
+  }
+  const [expandedRun, setExpandedRun] = useState<Set<string>>(new Set());
+  const totalMessages = runCases.reduce((sum, item) => sum + userTurns(item).length * 2, 0);
+  const runProgress = totalMessages ? Math.round((messagesDone / totalMessages) * 100) : 0;
+
+  useEffect(() => {
+    if (runId === 0) return;
+    let cancelled = false;
+    const timers: number[] = [];
+    const schedule = (fn: () => void, ms: number) =>
+      timers.push(window.setTimeout(() => !cancelled && fn(), ms));
+    let done = 0;
+    const push = (id: string, message: RunMessage) =>
+      setTranscripts((current) => ({ ...current, [id]: [...(current[id] ?? []), message] }));
+    const steps: (() => number)[] = [];
+    runCases.forEach((item) => {
+      const outcome = outcomeFor(item);
+      steps.push(() => {
+        setRunStatuses((current) => ({ ...current, [item.id]: "running" }));
+        setExpandedRun(new Set([item.id]));
+        return 500;
+      });
+      userTurns(item).forEach((text, i) => {
+        steps.push(() => {
+          push(item.id, { role: "user", text });
+          setMessagesDone(++done);
+          setTypingId(item.id);
+          return 1500;
+        });
+        steps.push(() => {
+          const reply = outcome.replies[i] ?? outcome.replies[outcome.replies.length - 1];
+          setTypingId(null);
+          push(item.id, { role: "bot", text: reply.text, rating: reply.rating });
+          setMessagesDone(++done);
+          return 700;
+        });
+      });
+      steps.push(() => {
+        setRunStatuses((current) => ({
+          ...current,
+          [item.id]: casePassed(outcome) ? "passed" : "failed",
+        }));
+        return 600;
+      });
+    });
+    steps.push(() => {
+      setRunDone(true);
+      const record = completedRun(`run-${runId}`, runCases, Date.now());
+      setRunHistory((current) => [...current, record]);
+      setSelectedRunId(record.id);
+      const tested = new Map(runCases.map((item) => [item.id, caseScore(outcomeFor(item))]));
+      setSaved((current) =>
+        current.map((entry) =>
+          tested.has(entry.item.id) ? { ...entry, result: tested.get(entry.item.id) } : entry,
+        ),
+      );
+      return 900;
+    });
+    steps.push(() => {
+      setView("results");
+      setRunId(0);
+      setTypingId(null);
+      setMessagesDone(0);
+      setRunDone(false);
+      return 0;
+    });
+    const run = (i: number) => {
+      if (i >= steps.length) return;
+      const delay = steps[i]();
+      schedule(() => run(i + 1), delay);
+    };
+    schedule(() => run(0), 400);
+    return () => {
+      cancelled = true;
+      timers.forEach((t) => window.clearTimeout(t));
+    };
+  }, [runId, runCases]);
+
+  const resetRun = () => {
+    setRunId(0);
+    setRunCases([]);
+    setRunStatuses({});
+    setTranscripts({});
+    setTypingId(null);
+    setMessagesDone(0);
+    setRunDone(false);
+    setExpandedRun(new Set());
+  };
+
+  const startTesting = () => {
+    resetRun();
+    setPanel("closed");
+    setEditing(null);
+    setRunCases(added);
+    setRunStatuses(Object.fromEntries(added.map((item) => [item.id, "queued" as RunStatus])));
+    setView("run");
+    setRunId(Date.now());
+  };
   const addedIds = new Set(added.map((item) => item.id));
 
   useEffect(() => {
@@ -399,7 +580,7 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-muted/20 p-4 sm:p-5">
+    <div className={cn("flex min-h-0 flex-1 flex-col bg-muted/20 p-4 sm:p-5", !active && "hidden")}>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <header className="flex shrink-0 flex-wrap items-center gap-4 border-b border-border px-5 py-4">
           <button
@@ -433,7 +614,66 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
 
         <div ref={bodyRef} className="relative flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
-            {added.length === 0 ? (
+            {view === "run" && (liveRun || selectedRun) ? (
+              <TestRunView
+                cases={liveRun ? runCases : selectedRun.cases}
+                statuses={liveRun ? runStatuses : selectedRun.statuses}
+                transcripts={liveRun ? transcripts : selectedRun.transcripts}
+                typingId={liveRun ? typingId : null}
+                progress={liveRun ? runProgress : 100}
+                expanded={expandedRun}
+                headerRight={
+                  liveRun ? (
+                    <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-[12.5px] font-medium text-blue-600">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                      Live run
+                    </span>
+                  ) : (
+                    <RunHistoryPicker
+                      options={runOptions}
+                      selectedId={selectedRun.id}
+                      onSelect={selectRun}
+                    />
+                  )
+                }
+                onToggle={(id) =>
+                  setExpandedRun((current) => {
+                    const next = new Set(current);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  })
+                }
+                onToggleAll={() => {
+                  const shown = liveRun ? runCases : selectedRun.cases;
+                  setExpandedRun((current) =>
+                    current.size === shown.length
+                      ? new Set()
+                      : new Set(shown.map((item) => item.id)),
+                  );
+                }}
+              />
+            ) : view === "results" && selectedRun ? (
+              <TestResultsView
+                key={selectedRun.id}
+                cases={selectedRun.cases}
+                header={
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-[15px] font-semibold text-foreground">Run results</h2>
+                      <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                        {runOptions.find((option) => option.id === selectedRun.id)?.meta}
+                      </p>
+                    </div>
+                    <RunHistoryPicker
+                      options={runOptions}
+                      selectedId={selectedRun.id}
+                      onSelect={selectRun}
+                    />
+                  </div>
+                }
+              />
+            ) : added.length === 0 ? (
               <div className="flex flex-1 items-center justify-center p-6">
                 <EmptyStateCard
                   dimmed={generating}
@@ -452,6 +692,7 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
               <AddedCasesList
                 cases={added}
                 saved={saved}
+                recent={returned}
                 busy={generating}
                 onToggleSave={(item) =>
                   setSaved((current) =>
@@ -466,7 +707,10 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
                   setPanel("manual");
                 }}
                 onRemove={(id) => setAdded((current) => current.filter((c) => c.id !== id))}
-                onClearAll={() => setAdded([])}
+                onClearAll={() => {
+                  setAdded([]);
+                  setReturned(false);
+                }}
                 onGenerate={startGenerating}
                 onManual={() => {
                   setEditing(null);
@@ -475,7 +719,7 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
               />
             )}
 
-            {generating && (
+            {generating && view === "cases" && (
               <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center px-6">
                 <ProgressToast
                   progress={progress}
@@ -486,7 +730,7 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
             )}
           </div>
 
-          {panel !== "closed" && (
+          {view === "cases" && panel !== "closed" && (
             <>
               <button
                 type="button"
@@ -545,36 +789,103 @@ export function PromptPlayground({ onBack }: { onBack: () => void }) {
 
         <footer className="relative flex shrink-0 items-center justify-center border-t border-border px-5 py-3">
           <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
-            <span
-              className="inline-flex h-9 w-12 items-center justify-center rounded-lg text-white"
-              style={{ backgroundColor: BRAND }}
-              title="Use cases"
-            >
-              <ClipboardList className="h-4 w-4" />
-            </span>
-            <button
-              type="button"
-              title="Saved runs"
-              className="inline-flex h-9 w-12 items-center justify-center rounded-lg text-foreground transition hover:bg-muted"
-            >
-              <Save className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              title="Analysis"
-              className="inline-flex h-9 w-12 items-center justify-center rounded-lg text-foreground transition hover:bg-muted"
-            >
-              <BarChart3 className="h-4 w-4" />
-            </button>
+            {(
+              [
+                { key: "cases", title: "Use cases", Icon: ClipboardList, enabled: true },
+                {
+                  key: "run",
+                  title: "Test run",
+                  Icon: Save,
+                  enabled: liveRun || runHistory.length > 0,
+                },
+                {
+                  key: "results",
+                  title: "Results",
+                  Icon: BarChart3,
+                  enabled: runHistory.length > 0,
+                },
+              ] as const
+            ).map(({ key, title, Icon, enabled }) => (
+              <button
+                key={key}
+                type="button"
+                title={title}
+                aria-label={title}
+                aria-pressed={view === key}
+                disabled={!enabled}
+                onClick={() => {
+                  if (key === "run" && !liveRun && view !== "run" && selectedRun) {
+                    setExpandedRun(new Set(selectedRun.cases[0] ? [selectedRun.cases[0].id] : []));
+                  }
+                  setView(key);
+                }}
+                className={cn(
+                  "inline-flex h-9 w-12 items-center justify-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-40",
+                  view === key ? "text-white" : "text-foreground hover:bg-muted",
+                )}
+                style={view === key ? { backgroundColor: BRAND } : undefined}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
           </div>
-          <button
-            type="button"
-            disabled={added.length === 0}
-            className="absolute right-5 inline-flex h-10 items-center gap-2 rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355] disabled:cursor-not-allowed disabled:bg-[#C72B65]/45 disabled:shadow-none"
-          >
-            Start Testing
-            <ArrowRight className="h-4 w-4" />
-          </button>
+          <div className="absolute right-5 flex items-center gap-2">
+            {view === "cases" && (
+              <button
+                type="button"
+                onClick={startTesting}
+                disabled={added.length === 0 || generating}
+                className="inline-flex h-10 items-center gap-2 rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355] disabled:cursor-not-allowed disabled:bg-[#C72B65]/45 disabled:shadow-none"
+              >
+                Start Testing
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+            {view === "run" &&
+              (!liveRun ? (
+                <button
+                  type="button"
+                  onClick={() => setView("results")}
+                  className="inline-flex h-10 items-center gap-2 rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
+                >
+                  View results
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetRun();
+                    setView("cases");
+                  }}
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-red-300 bg-card px-4 text-[13px] font-medium text-red-600 transition hover:bg-red-50"
+                >
+                  <span className="h-3.5 w-3.5 rounded-[3px] bg-red-500" />
+                  Stop
+                </button>
+              ))}
+            {view === "results" && (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-4 text-[13px] font-medium text-foreground shadow-sm transition hover:bg-muted"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Enhance Prompt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetRun();
+                    setView("cases");
+                  }}
+                  className="inline-flex h-10 items-center rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
+                >
+                  New Test
+                </button>
+              </>
+            )}
+          </div>
         </footer>
       </section>
     </div>
@@ -1016,6 +1327,7 @@ function CaseTags({ tags }: { tags: string[] }) {
 function AddedCasesList({
   cases,
   saved,
+  recent,
   busy,
   onToggleSave,
   onAddSaved,
@@ -1027,6 +1339,7 @@ function AddedCasesList({
 }: {
   cases: UseCase[];
   saved: SavedCase[];
+  recent: boolean;
   busy: boolean;
   onToggleSave: (item: UseCase) => void;
   onAddSaved: (item: UseCase) => void;
@@ -1085,7 +1398,17 @@ function AddedCasesList({
             </h2>
           </div>
         ) : (
-          <h2 className="text-[15px] font-semibold text-foreground">Use cases ({cases.length})</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-[15px] font-semibold text-foreground">
+              Use cases ({cases.length})
+            </h2>
+            {recent && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C72B65]/25 bg-[#FBE7EF] px-2.5 py-1 text-[11.5px] font-medium text-[#C72B65] animate-fade-up">
+                <History className="h-3 w-3" />
+                Recent use cases
+              </span>
+            )}
+          </div>
         )}
         {showSaved ? (
           <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
@@ -1295,7 +1618,7 @@ function AddedCasesList({
                     <span className="h-px flex-1 bg-border" aria-hidden="true" />
                   </div>
                   <div className="grid items-start gap-4 xl:grid-cols-2">
-                    {group.entries.map(({ item, savedAt }) => {
+                    {group.entries.map(({ item, savedAt, result }) => {
                       const inRun = addedIds.has(item.id);
                       return (
                         <article
@@ -1338,13 +1661,22 @@ function AddedCasesList({
                             </div>
                           </div>
                           <CaseCardBody item={item} />
-                          <p className="mt-3 border-t border-border pt-2.5 text-[11.5px] text-muted-foreground">
-                            Saved at{" "}
-                            {new Date(savedAt).toLocaleTimeString([], {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </p>
+                          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-2.5">
+                            <p className="text-[11.5px] text-muted-foreground">
+                              Saved at{" "}
+                              {new Date(savedAt).toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            {result !== undefined && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] text-emerald-700">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Results
+                                <span className="font-semibold tabular-nums">{result}%</span>
+                              </span>
+                            )}
+                          </div>
                         </article>
                       );
                     })}

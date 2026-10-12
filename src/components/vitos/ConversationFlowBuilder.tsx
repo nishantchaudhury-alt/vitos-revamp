@@ -1441,6 +1441,7 @@ function BuilderInner({
   const [running, setRunning] = useState(false);
   const [showDeploymentSettings, setShowDeploymentSettings] = useState(false);
   const [showPromptPlayground, setShowPromptPlayground] = useState(false);
+  const [playgroundOpened, setPlaygroundOpened] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const minimapColor = useCallback((node: Node) => {
@@ -1490,9 +1491,13 @@ function BuilderInner({
         </span>
       </header>
 
-      {showPromptPlayground ? (
-        <PromptPlayground onBack={() => setShowPromptPlayground(false)} />
-      ) : showDeploymentSettings ? (
+      {playgroundOpened && (
+        <PromptPlayground
+          active={showPromptPlayground}
+          onBack={() => setShowPromptPlayground(false)}
+        />
+      )}
+      {showPromptPlayground ? null : showDeploymentSettings ? (
         agent.subType === "voice" && agent.voiceMode === "multi" ? (
           <MultiVoiceDeploymentSettings
             agent={agent}
@@ -1553,7 +1558,10 @@ function BuilderInner({
               type="button"
               aria-label="Open prompt playground"
               title="Prompt playground"
-              onClick={() => setShowPromptPlayground(true)}
+              onClick={() => {
+                setPlaygroundOpened(true);
+                setShowPromptPlayground(true);
+              }}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-hover"
             >
               <Pencil className="h-4 w-4" />
