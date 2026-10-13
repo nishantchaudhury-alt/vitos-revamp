@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -30,7 +30,8 @@ import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  RunHistoryPicker,
+  RunHistoryButton,
+  RunHistoryPanel,
   TestResultsView,
   TestRunView,
   caseScore,
@@ -154,6 +155,22 @@ function seedRuns(): RunRecord[] {
       daysAgoAt(4, 11, 20),
     ),
     completedRun("run-seed-2", USE_CASE_LIBRARY.slice(0, 2), daysAgoAt(1, 16, 35)),
+    completedRun(
+      "run-seed-3",
+      pick([
+        "saved-fraud",
+        "saved-rejection",
+        "saved-otp",
+        "saved-coapplicant",
+        "saved-salary-slip",
+        "saved-topup",
+        "saved-prepay",
+        "saved-emi-date",
+        "saved-address",
+        "saved-language-tamil",
+      ]),
+      daysAgoAt(1, 18, 5),
+    ),
   ];
 }
 
@@ -415,13 +432,25 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
         minute: "2-digit",
       })} · ${record.cases.length} ${record.cases.length === 1 ? "case" : "cases"}`,
       score: runScore(record.cases),
+      cases: record.cases,
     }))
     .reverse();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const selectedOption = runOptions.find((option) => option.id === selectedRun?.id);
+  const historyButton = (
+    <RunHistoryButton
+      count={runOptions.length}
+      open={historyOpen}
+      onClick={() => setHistoryOpen((open) => !open)}
+    />
+  );
+  const [focusCase, setFocusCase] = useState<string | null>(null);
+  const selectedRunIndex = runHistory.findIndex((record) => record.id === selectedRun?.id);
+  const previousRun = selectedRunIndex > 0 ? runHistory[selectedRunIndex - 1] : undefined;
   const selectRun = (id: string) => {
     setSelectedRunId(id);
-    const record = runHistory.find((item) => item.id === id);
-    setExpandedRun(new Set(record?.cases[0] ? [record.cases[0].id] : []));
   };
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const [returned, setReturned] = useState(false);
   const [wasActive, setWasActive] = useState(active);
   if (active !== wasActive) {
@@ -431,7 +460,6 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
       setView(liveRun ? "run" : "cases");
     }
   }
-  const [expandedRun, setExpandedRun] = useState<Set<string>>(new Set());
   const totalMessages = runCases.reduce((sum, item) => sum + userTurns(item).length * 2, 0);
   const runProgress = totalMessages ? Math.round((messagesDone / totalMessages) * 100) : 0;
 
@@ -449,7 +477,6 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
       const outcome = outcomeFor(item);
       steps.push(() => {
         setRunStatuses((current) => ({ ...current, [item.id]: "running" }));
-        setExpandedRun(new Set([item.id]));
         return 500;
       });
       userTurns(item).forEach((text, i) => {
@@ -516,7 +543,6 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
     setTypingId(null);
     setMessagesDone(0);
     setRunDone(false);
-    setExpandedRun(new Set());
   };
 
   const startTesting = () => {
@@ -615,7 +641,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
         </header>
 
         <div ref={bodyRef} className="relative flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
+          <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {view === "run" && (liveRun || selectedRun) ? (
               <TestRunView
                 cases={liveRun ? runCases : selectedRun.cases}
@@ -623,7 +649,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                 transcripts={liveRun ? transcripts : selectedRun.transcripts}
                 typingId={liveRun ? typingId : null}
                 progress={liveRun ? runProgress : 100}
-                expanded={expandedRun}
+                focusId={liveRun ? null : focusCase}
                 headerRight={
                   liveRun ? (
                     <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-[12.5px] font-medium text-blue-600">
@@ -631,47 +657,35 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                       Live run
                     </span>
                   ) : (
-                    <RunHistoryPicker
-                      options={runOptions}
-                      selectedId={selectedRun.id}
-                      onSelect={selectRun}
-                    />
+                    <span className="flex items-center gap-3">
+                      <span className="text-[12.5px] text-muted-foreground">
+                        <span className="font-medium text-foreground">{selectedOption?.title}</span>{" "}
+                        · {selectedOption?.meta}
+                      </span>
+                      {historyButton}
+                    </span>
                   )
                 }
-                onToggle={(id) =>
-                  setExpandedRun((current) => {
-                    const next = new Set(current);
-                    if (next.has(id)) next.delete(id);
-                    else next.add(id);
-                    return next;
-                  })
-                }
-                onToggleAll={() => {
-                  const shown = liveRun ? runCases : selectedRun.cases;
-                  setExpandedRun((current) =>
-                    current.size === shown.length
-                      ? new Set()
-                      : new Set(shown.map((item) => item.id)),
-                  );
-                }}
               />
             ) : view === "results" && selectedRun ? (
               <TestResultsView
                 key={selectedRun.id}
                 cases={selectedRun.cases}
+                previousScore={previousRun ? runScore(previousRun.cases) : undefined}
+                onViewConversation={(id) => {
+                  setFocusCase(id);
+                  setView("run");
+                }}
                 header={
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h2 className="text-[15px] font-semibold text-foreground">Run results</h2>
                       <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                        {runOptions.find((option) => option.id === selectedRun.id)?.meta}
+                        <span className="font-medium text-foreground">{selectedOption?.title}</span>{" "}
+                        · {selectedOption?.meta}
                       </p>
                     </div>
-                    <RunHistoryPicker
-                      options={runOptions}
-                      selectedId={selectedRun.id}
-                      onSelect={selectRun}
-                    />
+                    {historyButton}
                   </div>
                 }
               />
@@ -731,6 +745,15 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
               </div>
             )}
           </div>
+
+          {historyOpen && ((view === "run" && !liveRun) || view === "results") && (
+            <RunHistoryPanel
+              options={runOptions}
+              selectedId={selectedRun?.id ?? ""}
+              onSelect={selectRun}
+              onClose={closeHistory}
+            />
+          )}
 
           {view === "cases" && panel !== "closed" && (
             <>
@@ -816,9 +839,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                 aria-pressed={view === key}
                 disabled={!enabled}
                 onClick={() => {
-                  if (key === "run" && !liveRun && view !== "run" && selectedRun) {
-                    setExpandedRun(new Set(selectedRun.cases[0] ? [selectedRun.cases[0].id] : []));
-                  }
+                  setFocusCase(null);
                   setView(key);
                 }}
                 className={cn(
@@ -870,13 +891,6 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
               ))}
             {view === "results" && (
               <>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[12.5px] font-medium text-foreground shadow-sm transition hover:bg-muted"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Enhance Prompt
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1274,7 +1288,7 @@ function CaseIconButton({
         "inline-flex h-7 w-7 items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35",
         active
           ? "border-[#C72B65]/40 bg-[#FBE7EF] text-[#C72B65]"
-          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+          : "border-[#C72B65]/30 bg-card text-[#C72B65] hover:border-[#C72B65]/60 hover:bg-[#FBE7EF]",
       )}
     >
       {children}
@@ -1326,6 +1340,50 @@ function CaseTags({ tags }: { tags: string[] }) {
   );
 }
 
+function SavedDatesCalendar({
+  selected,
+  defaultMonth,
+  savedDays,
+  onSelect,
+  onAllDates,
+}: {
+  selected: Date | undefined;
+  defaultMonth: Date;
+  savedDays: Date[];
+  onSelect: (date: Date | undefined) => void;
+  onAllDates: () => void;
+}) {
+  return (
+    <>
+      <Calendar
+        mode="single"
+        selected={selected}
+        defaultMonth={defaultMonth}
+        onSelect={onSelect}
+        disabled={{ after: new Date() }}
+        modifiers={{ hasSaved: savedDays }}
+        modifiersClassNames={{
+          hasSaved:
+            "relative after:pointer-events-none after:absolute after:bottom-1 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-[#C72B65]",
+        }}
+      />
+      <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2">
+        <span className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#C72B65]" />
+          Has saved use cases
+        </span>
+        <button
+          type="button"
+          onClick={onAllDates}
+          className="text-[12px] font-medium text-[#C72B65] hover:underline"
+        >
+          All dates
+        </button>
+      </div>
+    </>
+  );
+}
+
 function AddedCasesList({
   cases,
   saved,
@@ -1355,20 +1413,20 @@ function AddedCasesList({
   const [view, setView] = useState<"cases" | "saved">("cases");
   const [pickedDate, setPickedDate] = useState<Date | undefined>();
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [groupCalendar, setGroupCalendar] = useState<string | null>(null);
   const savedDays = saved.map((entry) => new Date(entry.savedAt));
   const visibleSaved = pickedDate
     ? saved.filter((entry) => isSameDay(entry.savedAt, pickedDate))
     : saved;
-  const savedIds = new Set(saved.map((entry) => entry.item.id));
   const addedIds = new Set(cases.map((item) => item.id));
   const showSaved = view === "saved";
   const groups = [...visibleSaved]
     .sort((a, b) => b.savedAt - a.savedAt)
-    .reduce<{ label: string; entries: SavedCase[] }[]>((acc, entry) => {
+    .reduce<{ label: string; day: number; entries: SavedCase[] }[]>((acc, entry) => {
       const label = dayLabel(entry.savedAt);
       const last = acc[acc.length - 1];
       if (last?.label === label) last.entries.push(entry);
-      else acc.push({ label, entries: [entry] });
+      else acc.push({ label, day: entry.savedAt, entries: [entry] });
       return acc;
     }, []);
   const menuItem =
@@ -1460,37 +1518,19 @@ function AddedCasesList({
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto rounded-xl p-0">
-              <Calendar
-                mode="single"
+              <SavedDatesCalendar
                 selected={pickedDate}
                 defaultMonth={pickedDate ?? new Date()}
+                savedDays={savedDays}
                 onSelect={(date) => {
                   setPickedDate(date);
                   setCalendarOpen(false);
                 }}
-                disabled={{ after: new Date() }}
-                modifiers={{ hasSaved: savedDays }}
-                modifiersClassNames={{
-                  hasSaved:
-                    "relative after:pointer-events-none after:absolute after:bottom-1 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-[#C72B65]",
+                onAllDates={() => {
+                  setPickedDate(undefined);
+                  setCalendarOpen(false);
                 }}
               />
-              <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2">
-                <span className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#C72B65]" />
-                  Has saved use cases
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPickedDate(undefined);
-                    setCalendarOpen(false);
-                  }}
-                  className="text-[12px] font-medium text-[#C72B65] hover:underline"
-                >
-                  All dates
-                </button>
-              </div>
             </PopoverContent>
           </Popover>
         ) : (
@@ -1611,10 +1651,37 @@ function AddedCasesList({
               {groups.map((group) => (
                 <section key={group.label} className="animate-fade-up">
                   <div className="mb-3 flex items-center gap-2">
-                    <h3 className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      {group.label}
-                    </h3>
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-card px-1.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
+                    <Popover
+                      open={groupCalendar === group.label}
+                      onOpenChange={(open) => setGroupCalendar(open ? group.label : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`${group.label}, open calendar`}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-white px-3 text-[12px] font-semibold uppercase tracking-wider text-foreground shadow-sm transition hover:border-[#C72B65]/40 hover:text-[#C72B65] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30 data-[state=open]:border-[#C72B65]/40 data-[state=open]:text-[#C72B65]"
+                        >
+                          <CalendarDays className="h-3.5 w-3.5 text-[#C72B65]" />
+                          {group.label}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-auto rounded-xl p-0">
+                        <SavedDatesCalendar
+                          selected={pickedDate ?? new Date(group.day)}
+                          defaultMonth={pickedDate ?? new Date(group.day)}
+                          savedDays={savedDays}
+                          onSelect={(date) => {
+                            if (date) setPickedDate(date);
+                            setGroupCalendar(null);
+                          }}
+                          onAllDates={() => {
+                            setPickedDate(undefined);
+                            setGroupCalendar(null);
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border">
                       {group.entries.length}
                     </span>
                     <span className="h-px flex-1 bg-border" aria-hidden="true" />
@@ -1690,7 +1757,6 @@ function AddedCasesList({
         ) : (
           <div className="grid items-start gap-4 xl:grid-cols-2">
             {cases.map((item, i) => {
-              const isSaved = savedIds.has(item.id);
               return (
                 <article
                   key={item.id}
@@ -1712,13 +1778,6 @@ function AddedCasesList({
                       </CaseIconButton>
                       <CaseIconButton label="Delete use case" onClick={() => onRemove(item.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
-                      </CaseIconButton>
-                      <CaseIconButton
-                        label={isSaved ? "Remove from saved" : "Save use case"}
-                        onClick={() => onToggleSave(item)}
-                        active={isSaved}
-                      >
-                        <Save className="h-3.5 w-3.5" />
                       </CaseIconButton>
                     </div>
                   </div>
