@@ -582,7 +582,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col bg-muted/20 p-4 sm:p-5", !active && "hidden")}>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        <header className="flex shrink-0 flex-wrap items-center gap-4 border-b border-border px-5 py-4">
+        <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-2.5">
           <button
             type="button"
             onClick={onBack}
@@ -592,21 +592,23 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-[16px] font-semibold text-foreground">Prompt test and analysis</h1>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">
+            <h1 className="text-[14px] font-semibold leading-5 text-foreground">
+              Prompt test and analysis
+            </h1>
+            <p className="text-[12px] leading-4 text-muted-foreground">
               Simulate real use cases, analyze results, and improve prompt quality.
             </p>
           </div>
-          <div className="inline-flex items-center rounded-full border border-border bg-card p-0.5 shadow-sm">
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white">
-              <FlaskConical className="h-3.5 w-3.5" />
+          <div className="inline-flex items-center rounded-full border border-border bg-muted/40 p-0.5">
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-[#C72B65] px-3 text-[12px] font-medium text-white shadow-sm">
+              <FlaskConical className="h-3 w-3" />
               Test Prompt
             </span>
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-medium text-foreground transition hover:bg-muted"
+              className="inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium text-muted-foreground transition hover:text-foreground"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <Pencil className="h-3 w-3" />
               Build Prompt
             </button>
           </div>
@@ -787,8 +789,8 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
           )}
         </div>
 
-        <footer className="relative flex shrink-0 items-center justify-center border-t border-border px-5 py-3">
-          <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-sm">
+        <footer className="relative flex shrink-0 items-center justify-center border-t border-border px-4 py-2">
+          <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
             {(
               [
                 { key: "cases", title: "Use cases", Icon: ClipboardList, enabled: true },
@@ -820,25 +822,27 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                   setView(key);
                 }}
                 className={cn(
-                  "inline-flex h-9 w-12 items-center justify-center rounded-lg transition disabled:cursor-not-allowed disabled:opacity-40",
-                  view === key ? "text-white" : "text-foreground hover:bg-muted",
+                  "inline-flex h-7 w-9 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-40",
+                  view === key
+                    ? "text-white shadow-sm"
+                    : "text-muted-foreground hover:bg-card hover:text-foreground",
                 )}
                 style={view === key ? { backgroundColor: BRAND } : undefined}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
               </button>
             ))}
           </div>
-          <div className="absolute right-5 flex items-center gap-2">
+          <div className="absolute right-4 flex items-center gap-2">
             {view === "cases" && (
               <button
                 type="button"
                 onClick={startTesting}
                 disabled={added.length === 0 || generating}
-                className="inline-flex h-10 items-center gap-2 rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355] disabled:cursor-not-allowed disabled:bg-[#C72B65]/45 disabled:shadow-none"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355] disabled:cursor-not-allowed disabled:bg-[#C72B65]/45 disabled:shadow-none"
               >
                 Start Testing
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
             {view === "run" &&
@@ -846,10 +850,10 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                 <button
                   type="button"
                   onClick={() => setView("results")}
-                  className="inline-flex h-10 items-center gap-2 rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
                 >
                   View results
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               ) : (
                 <button
@@ -858,9 +862,9 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                     resetRun();
                     setView("cases");
                   }}
-                  className="inline-flex h-10 items-center gap-2 rounded-full border border-red-300 bg-card px-4 text-[13px] font-medium text-red-600 transition hover:bg-red-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-red-300 bg-card px-3.5 text-[12.5px] font-medium text-red-600 transition hover:bg-red-50"
                 >
-                  <span className="h-3.5 w-3.5 rounded-[3px] bg-red-500" />
+                  <span className="h-3 w-3 rounded-[3px] bg-red-500" />
                   Stop
                 </button>
               ))}
@@ -868,9 +872,9 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
               <>
                 <button
                   type="button"
-                  className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card px-4 text-[13px] font-medium text-foreground shadow-sm transition hover:bg-muted"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-[12.5px] font-medium text-foreground shadow-sm transition hover:bg-muted"
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-3.5 w-3.5" />
                   Enhance Prompt
                 </button>
                 <button
@@ -879,7 +883,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                     resetRun();
                     setView("cases");
                   }}
-                  className="inline-flex h-10 items-center rounded-full bg-[#C72B65] px-4 text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
+                  className="inline-flex h-8 items-center rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
                 >
                   New Test
                 </button>
@@ -894,9 +898,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-      {children}
-    </span>
+    <span className="mb-1.5 block text-[12px] font-medium text-foreground/80">{children}</span>
   );
 }
 
@@ -917,10 +919,10 @@ function SelectField({
 }) {
   const current = options.find((option) => option.value === value);
   return (
-    <div className="relative flex h-11 items-center gap-2 rounded-xl border border-border bg-card px-3.5 text-[13.5px] text-foreground transition focus-within:border-[#C72B65]/40 focus-within:ring-2 focus-within:ring-[#C72B65]/10 hover:border-foreground/20">
+    <div className="relative flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground shadow-sm transition focus-within:border-[#C72B65]/40 focus-within:ring-2 focus-within:ring-[#C72B65]/10 hover:border-foreground/20">
       {icon}
       <span className="min-w-0 flex-1 truncate">{current?.label}</span>
-      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <select
         aria-label={label}
         value={value}
@@ -959,20 +961,20 @@ function EmptyStateCard({
   return (
     <div
       className={cn(
-        "w-full max-w-[720px] overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-opacity duration-300",
+        "w-full max-w-[520px] overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_24px_-12px_rgba(16,24,40,0.12)] transition-opacity duration-300",
         dimmed && "pointer-events-none opacity-50",
       )}
     >
-      <div className="px-8 pb-8 pt-10 text-center">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FBE7EF] text-[#C72B65]">
-          <ClipboardList className="h-5 w-5" />
+      <div className="px-6 pb-6 pt-7 text-center">
+        <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#FBE7EF] text-[#C72B65] ring-4 ring-[#FBE7EF]/50">
+          <ClipboardList className="h-[18px] w-[18px]" />
         </span>
-        <h2 className="mt-4 text-[17px] font-semibold text-foreground">No use cases yet</h2>
-        <p className="mx-auto mt-2 max-w-sm text-[13.5px] leading-relaxed text-muted-foreground">
+        <h2 className="mt-3.5 text-[15px] font-semibold text-foreground">No use cases yet</h2>
+        <p className="mx-auto mt-1 max-w-[340px] text-[12.5px] leading-5 text-muted-foreground">
           Define how you want to test your prompt. Add cases manually or let AI generate them.
         </p>
 
-        <div className="mt-8 grid gap-4 text-left sm:grid-cols-2">
+        <div className="mt-6 grid gap-3 text-left sm:grid-cols-2">
           <label className="block">
             <FieldLabel>Model</FieldLabel>
             <SelectField
@@ -980,7 +982,7 @@ function EmptyStateCard({
               value={model}
               onChange={onModelChange}
               options={MODELS.map((item) => ({ value: item.id, label: item.label }))}
-              icon={<Asterisk className="h-4 w-4 shrink-0 text-[#D97757]" strokeWidth={2.5} />}
+              icon={<Asterisk className="h-3.5 w-3.5 shrink-0 text-[#D97757]" strokeWidth={2.5} />}
             />
           </label>
           <label className="block">
@@ -997,36 +999,36 @@ function EmptyStateCard({
           </label>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button
             type="button"
             onClick={onGenerate}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#C72B65] text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#A92355] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/40"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#C72B65] text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/40"
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="h-3.5 w-3.5" />
             Generate with AI
           </button>
           <button
             type="button"
             onClick={onManual}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-muted/30 text-[14px] font-semibold text-foreground transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card text-[13px] font-medium text-foreground shadow-sm transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35"
           >
-            <Pencil className="h-4 w-4" />
+            <Pencil className="h-3.5 w-3.5" />
             Manually add
           </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-border bg-muted/30 px-8 py-4">
-        <span className="text-[13px] text-muted-foreground">Already have cases?</span>
+      <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/30 px-6 py-2.5">
+        <span className="text-[12px] text-muted-foreground">Already have cases?</span>
         <button
           type="button"
           onClick={() => uploadRef.current?.click()}
-          aria-label="Upload use cases"
           title="Upload CSV or JSON"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition hover:bg-muted"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-foreground transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35"
         >
-          <Upload className="h-4 w-4" />
+          <Upload className="h-3.5 w-3.5" />
+          Upload CSV or JSON
         </button>
         <input ref={uploadRef} type="file" accept=".csv,.json" className="sr-only" />
       </div>
