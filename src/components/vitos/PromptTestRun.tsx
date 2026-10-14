@@ -1678,9 +1678,18 @@ export function TestResultsView({
         </div>
       </ResultsSection>
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
-        <ResultsSection step={2} title="Which use cases are below target?">
-          <div className={cn(panel, "flex flex-1 flex-col p-3")}>
+      <ResultsSection
+        step={2}
+        title="How did each use case do?"
+        note="Select one to see why it scored that way"
+      >
+        <div
+          className={cn(
+            panel,
+            "grid overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]",
+          )}
+        >
+          <div className="flex flex-col p-3 lg:border-r lg:border-border">
             <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(96px,1fr)_32px] items-end gap-3 px-2 pb-2 text-[11px] font-medium text-muted-foreground">
               <span>Use case</span>
               <span>Score out of 100</span>
@@ -1733,11 +1742,9 @@ export function TestResultsView({
               above
             </p>
           </div>
-        </ResultsSection>
 
-        <ResultsSection step={3} title="Why did it score this way?">
           {selected && (
-            <div className={cn(panel, "flex flex-1 flex-col overflow-hidden")}>
+            <div className="flex min-w-0 flex-col border-t border-border lg:border-t-0">
               <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div className="min-w-0">
                   <h4 className="truncate text-[16px] font-semibold text-foreground">
@@ -1886,11 +1893,11 @@ export function TestResultsView({
               </div>
             </div>
           )}
-        </ResultsSection>
-      </div>
+        </div>
+      </ResultsSection>
 
       <ResultsSection
-        step={4}
+        step={3}
         title="What should I fix?"
         note={fixList.length ? "Ordered by use cases affected" : undefined}
       >
