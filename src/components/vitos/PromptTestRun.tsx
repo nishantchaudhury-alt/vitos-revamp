@@ -9,7 +9,6 @@ import {
   Clock,
   Info,
   Loader2,
-  Sparkles,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1079,11 +1078,32 @@ const RADAR_ORDER: MetricKey[] = [
 
 const metricLabel = (key: MetricKey) => METRICS.find((m) => m.key === key)?.label ?? key;
 
-const signed = (value: number) => (value > 0 ? `+${value}` : value < 0 ? `−${-value}` : "+0");
-
-function gapText(gap: number) {
-  if (gap >= 0) return "text-emerald-700";
-  return tone(PASS_MARK + gap).text;
+/** A 0–100 score bar coloured by band, with a tick at the pass mark. */
+function ScoreBar({
+  score,
+  drawn = true,
+  thick = false,
+}: {
+  score: number;
+  drawn?: boolean;
+  thick?: boolean;
+}) {
+  return (
+    <span className={cn("relative block rounded-full bg-muted", thick ? "h-2" : "h-1.5")}>
+      <span
+        className={cn(
+          "absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out",
+          tone(score).bar,
+        )}
+        style={{ width: drawn ? `${Math.max(0, Math.min(100, score))}%` : 0 }}
+      />
+      <span
+        className="absolute -top-[3px] h-[calc(100%+6px)] w-px bg-foreground/60"
+        style={{ left: `${PASS_MARK}%` }}
+        aria-hidden="true"
+      />
+    </span>
+  );
 }
 
 function ResultsSection({
@@ -1104,9 +1124,9 @@ function ResultsSection({
   return (
     <section
       aria-labelledby={`results-step-${step}`}
-      className={cn("flex min-w-0 flex-col gap-3", className)}
+      className={cn("flex min-w-0 flex-col rounded-xl bg-muted/50 p-2", className)}
     >
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-2 px-2 pb-2 pt-0.5">
         <div className="flex items-center gap-2">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[11px] font-semibold tabular-nums text-background">
             {step}
@@ -1206,42 +1226,68 @@ function MetricCard({
 
 function ScoreRadar({ scores }: { scores: Scores }) {
   const width = 220;
+  const height = 166;
   const center = width / 2;
   const middle = 84;
   const radius = 58;
+  const count = RADAR_ORDER.length;
+  const [hovered, setHovered] = useState<MetricKey | null>(null);
+  const [active, setActive] = useState(false);
+
+  const angleOf = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / count;
   const point = (i: number, value: number) => {
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / RADAR_ORDER.length;
     const r = (radius * value) / 100;
-    return [center + r * Math.cos(angle), middle + r * Math.sin(angle)] as const;
+    return [center + r * Math.cos(angleOf(i)), middle + r * Math.sin(angleOf(i))] as const;
   };
   const polygon = (values: number[]) =>
     values.map((value, i) => point(i, value).join(",")).join(" ");
+  // Each dimension owns the wedge of the chart nearest its axis, so hovering anywhere near it works.
+  const wedge = (i: number) => {
+    const half = Math.PI / count;
+    const reach = radius + 18;
+    const edge = (angle: number) =>
+      `${center + reach * Math.cos(angle)},${middle + reach * Math.sin(angle)}`;
+    return `${center},${middle} ${edge(angleOf(i) - half)} ${edge(angleOf(i))} ${edge(angleOf(i) + half)}`;
+  };
+  const band = (value: number) =>
+    value >= PASS_MARK ? "On target" : value >= 50 ? "Close to target" : "Below target";
+  const hoveredIndex = hovered ? RADAR_ORDER.indexOf(hovered) : -1;
+
   return (
     <figure className="flex flex-col items-center">
-      <svg
-        viewBox={`0 0 ${width} 166`}
-        className="h-[166px] w-[220px]"
-        role="img"
-        aria-label={RADAR_ORDER.map((key) => `${metricLabel(key)} ${scores[key]}`).join(", ")}
+      <div
+        className="relative"
+        onMouseEnter={() => setActive(true)}
+        onMouseLeave={() => {
+          setActive(false);
+          setHovered(null);
+        }}
       >
-        <g>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-[166px] w-[220px] overflow-visible"
+          role="group"
+          aria-label="Score by dimension"
+        >
           <polygon
             points={polygon(RADAR_ORDER.map(() => 100))}
             fill="none"
             stroke="#E5E7EB"
             strokeWidth="1"
           />
-          {RADAR_ORDER.map((_, i) => {
+          {RADAR_ORDER.map((key, i) => {
             const [x, y] = point(i, 100);
             return (
               <line
-                key={i}
+                key={key}
                 x1={center}
                 y1={middle}
                 x2={x}
                 y2={y}
-                stroke="#EEF0F3"
+                stroke={hovered === key ? "#C72B65" : "#EEF0F3"}
+                strokeOpacity={hovered === key ? 0.45 : 1}
                 strokeWidth="1"
+                className="transition-[stroke] duration-200"
               />
             );
           })}
@@ -1255,12 +1301,56 @@ function ScoreRadar({ scores }: { scores: Scores }) {
           <polygon
             points={polygon(RADAR_ORDER.map((key) => scores[key]))}
             fill="#C72B65"
-            fillOpacity="0.16"
+            fillOpacity={active ? 0.22 : 0.16}
             stroke="#C72B65"
             strokeWidth="1.5"
             strokeLinejoin="round"
-            className="transition-all duration-500"
+            className="transition-all duration-300"
           />
+
+          {RADAR_ORDER.map((key, i) => {
+            const [x, y] = point(i, scores[key]);
+            const isHovered = hovered === key;
+            return (
+              <circle
+                key={key}
+                cx={x}
+                cy={y}
+                r={isHovered ? 4.5 : active ? 3 : 2.2}
+                fill={isHovered ? "#C72B65" : "#FFFFFF"}
+                stroke="#C72B65"
+                strokeWidth="1.5"
+                className="transition-all duration-200"
+              />
+            );
+          })}
+
+          {/* Scores beside each point, shown while the chart is hovered. */}
+          {RADAR_ORDER.map((key, i) => {
+            const [x, y] = point(i, scores[key]);
+            const dx = Math.cos(angleOf(i));
+            const dy = Math.sin(angleOf(i));
+            return (
+              <text
+                key={key}
+                x={x + dx * 11}
+                y={y + dy * 11 + 3.5}
+                textAnchor="middle"
+                className={cn(
+                  "pointer-events-none text-[10px] font-semibold tabular-nums transition-opacity duration-200",
+                  scores[key] >= PASS_MARK
+                    ? "fill-emerald-600"
+                    : scores[key] >= 50
+                      ? "fill-amber-600"
+                      : "fill-red-600",
+                )}
+                style={{ opacity: active && hovered !== key ? 1 : 0 }}
+              >
+                {scores[key]}
+              </text>
+            );
+          })}
+
           {RADAR_ORDER.map((key, i) => {
             const [x, y] = point(i, 100);
             const dx = x - center;
@@ -1270,14 +1360,61 @@ function ScoreRadar({ scores }: { scores: Scores }) {
                 x={x + (Math.abs(dx) < 4 ? 0 : dx > 0 ? 6 : -6)}
                 y={y + (y < middle - 10 ? -7 : y > middle + 10 ? 13 : 4)}
                 textAnchor={Math.abs(dx) < 4 ? "middle" : dx > 0 ? "start" : "end"}
-                className="fill-muted-foreground text-[9.5px]"
+                className={cn(
+                  "pointer-events-none text-[9.5px] transition-[fill] duration-200",
+                  hovered === key ? "fill-foreground font-semibold" : "fill-muted-foreground",
+                )}
               >
                 {metricLabel(key)}
               </text>
             );
           })}
-        </g>
-      </svg>
+
+          {RADAR_ORDER.map((key, i) => (
+            <polygon
+              key={key}
+              points={wedge(i)}
+              fill="transparent"
+              tabIndex={0}
+              role="img"
+              aria-label={`${metricLabel(key)}: ${scores[key]} out of 100, target ${PASS_MARK}`}
+              onMouseEnter={() => setHovered(key)}
+              onFocus={() => {
+                setActive(true);
+                setHovered(key);
+              }}
+              onBlur={() => {
+                setActive(false);
+                setHovered(null);
+              }}
+              className="cursor-pointer outline-none"
+            />
+          ))}
+        </svg>
+
+        {hovered && hoveredIndex >= 0 && (
+          <div
+            className="pointer-events-none absolute z-10 w-max -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-[0_8px_20px_-10px_rgba(16,24,40,0.35)] animate-fade-up"
+            style={{
+              left: point(hoveredIndex, scores[hovered])[0],
+              top: point(hoveredIndex, scores[hovered])[1] - 10,
+            }}
+          >
+            <p className="text-[11px] font-medium text-muted-foreground">{metricLabel(hovered)}</p>
+            <p className="flex items-baseline gap-1.5">
+              <span
+                className={cn("text-[14px] font-semibold tabular-nums", tone(scores[hovered]).text)}
+              >
+                {scores[hovered]}
+              </span>
+              <span className="text-[11px] text-muted-foreground">/ 100</span>
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {band(scores[hovered])} · target {PASS_MARK}
+            </p>
+          </div>
+        )}
+      </div>
       <figcaption className="flex items-center gap-3 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-0.5 w-3 rounded-full bg-[#C72B65]" />
@@ -1396,7 +1533,6 @@ export function TestResultsView({
   const fullyPassed = rows.filter((row) => row.scenariosPassed === row.outcome.scenarios.length);
   const casesWithFailures = rows.length - fullyPassed.length;
   const below = rows.filter((row) => row.gap < 0).length;
-  const at = rows.filter((row) => row.gap === 0).length;
   const averages = METRICS.map((metric) => ({
     ...metric,
     value: Math.round(rows.reduce((sum, row) => sum + row.outcome.scores[metric.key], 0) / count),
@@ -1441,7 +1577,6 @@ export function TestResultsView({
         Number(b.fix.severity === "high") - Number(a.fix.severity === "high") ||
         b.issues - a.issues,
     );
-  const chosen = fixList.filter((entry) => !excluded.has(entry.fix.id)).length;
 
   return (
     <ViewShell className="animate-fade-up">
@@ -1546,23 +1681,14 @@ export function TestResultsView({
       <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
         <ResultsSection step={2} title="Which use cases are below target?">
           <div className={cn(panel, "flex flex-1 flex-col p-3")}>
-            <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(80px,1fr)_36px_26px] items-end gap-3 px-2 pb-2 text-[11px] font-medium text-muted-foreground">
+            <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(96px,1fr)_32px] items-end gap-3 px-2 pb-2 text-[11px] font-medium text-muted-foreground">
               <span>Use case</span>
-              <span className="grid grid-cols-2">
-                <span className="pr-1.5 text-right">below</span>
-                <span className="pl-1.5">above</span>
-              </span>
-              <span className="text-right">Gap</span>
+              <span>Score out of 100</span>
               <span className="text-right">Score</span>
             </div>
-            <div
-              className="space-y-0.5"
-              role="listbox"
-              aria-label="Use cases by distance from target"
-            >
+            <div className="space-y-0.5" role="listbox" aria-label="Use cases by score">
               {rows.map((row) => {
                 const active = row.item.id === selected?.item.id;
-                const width = `${(Math.min(Math.abs(row.gap), 50) / 50) * 50}%`;
                 return (
                   <button
                     key={row.item.id}
@@ -1571,7 +1697,7 @@ export function TestResultsView({
                     aria-selected={active}
                     onClick={() => setSelectedId(row.item.id)}
                     className={cn(
-                      "grid w-full grid-cols-[minmax(0,1.5fr)_minmax(80px,1fr)_36px_26px] items-center gap-3 rounded-lg px-2 py-[7px] text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30",
+                      "grid w-full grid-cols-[minmax(0,1.4fr)_minmax(96px,1fr)_32px] items-center gap-3 rounded-lg px-2 py-[7px] text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30",
                       active ? "bg-muted" : "hover:bg-muted/50",
                     )}
                   >
@@ -1584,27 +1710,13 @@ export function TestResultsView({
                     >
                       {row.item.title}
                     </span>
-                    <span className="relative h-2.5">
-                      <span className="absolute left-1/2 top-1/2 h-3.5 w-px -translate-y-1/2 bg-foreground/60" />
-                      <span
-                        className={cn(
-                          "absolute top-0 h-full transition-[width] duration-700 ease-out",
-                          row.gap < 0
-                            ? cn("right-1/2 rounded-l-sm", tone(row.score).bar)
-                            : "left-1/2 rounded-r-sm bg-emerald-500",
-                        )}
-                        style={{ width: drawn ? width : 0 }}
-                      />
-                    </span>
+                    <ScoreBar score={row.score} drawn={drawn} />
                     <span
                       className={cn(
-                        "text-right text-[12px] font-semibold tabular-nums",
-                        gapText(row.gap),
+                        "text-right text-[13px] font-semibold tabular-nums",
+                        tone(row.score).text,
                       )}
                     >
-                      {signed(row.gap)}
-                    </span>
-                    <span className="text-right text-[12px] tabular-nums text-muted-foreground">
                       {row.score}
                     </span>
                   </button>
@@ -1617,8 +1729,8 @@ export function TestResultsView({
               </div>
             </div>
             <p className="border-t border-border/70 px-2 pt-2.5 text-[11px] text-muted-foreground">
-              Centre line = pass mark {PASS_MARK} · {below} below · {at} at ·{" "}
-              {rows.length - below - at} above
+              Marker = pass mark {PASS_MARK} · {below} below target · {rows.length - below} on or
+              above
             </p>
           </div>
         </ResultsSection>
@@ -1660,7 +1772,7 @@ export function TestResultsView({
                       {selected.score}
                     </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {signed(selected.gap)} vs target
+                      out of 100 · target {PASS_MARK}
                     </p>
                   </div>
                   <div className="flex gap-1">
@@ -1687,42 +1799,25 @@ export function TestResultsView({
               <div className="grid items-center gap-4 px-5 py-4 sm:grid-cols-[220px_minmax(0,1fr)]">
                 <ScoreRadar scores={selected.outcome.scores} />
                 <div>
-                  <p className="mb-1.5 text-[12px] text-muted-foreground">Distance from target</p>
+                  <p className="mb-1.5 text-[12px] text-muted-foreground">
+                    Score by dimension · target {PASS_MARK}
+                  </p>
                   <div className="space-y-1">
                     {RADAR_ORDER.map((key) => {
                       const value = selected.outcome.scores[key];
-                      const gap = value - PASS_MARK;
                       return (
                         <div
                           key={key}
-                          className="grid grid-cols-[84px_minmax(0,1fr)_34px_24px] items-center gap-2.5 py-1"
+                          className="grid grid-cols-[84px_minmax(0,1fr)_28px] items-center gap-2.5 py-1"
                         >
                           <span className="text-[12px] text-foreground/85">{metricLabel(key)}</span>
-                          <span className="relative h-1.5">
-                            <span
-                              className={cn(
-                                "absolute top-0 h-full rounded-full transition-all duration-500 ease-out",
-                                gap < 0 ? tone(value).bar : "bg-emerald-500",
-                              )}
-                              style={{
-                                left: `${Math.min(value, PASS_MARK)}%`,
-                                width: `${Math.abs(gap)}%`,
-                              }}
-                            />
-                            <span
-                              className="absolute -top-[3px] h-3 w-px bg-foreground/70"
-                              style={{ left: `${PASS_MARK}%` }}
-                            />
-                          </span>
+                          <ScoreBar score={value} />
                           <span
                             className={cn(
                               "text-right text-[12px] font-semibold tabular-nums",
-                              gapText(gap),
+                              tone(value).text,
                             )}
                           >
-                            {signed(gap)}
-                          </span>
-                          <span className="text-right text-[12px] tabular-nums text-muted-foreground">
                             {value}
                           </span>
                         </div>
@@ -1798,15 +1893,6 @@ export function TestResultsView({
         step={4}
         title="What should I fix?"
         note={fixList.length ? "Ordered by use cases affected" : undefined}
-        action={
-          fixList.length > 0 && (
-            <button type="button" disabled={chosen === 0} className={btn.primary}>
-              <Sparkles className="h-3.5 w-3.5" />
-              Enhance prompt with {chosen === fixList.length ? "these" : chosen}{" "}
-              {chosen === 1 ? "fix" : "fixes"}
-            </button>
-          )
-        }
       >
         {fixList.length === 0 ? (
           <div className={cn(panel, "flex items-center gap-3 p-5")}>
@@ -1877,7 +1963,7 @@ export function TestResultsView({
                               tone(PASS_MARK + target.gap).text,
                             )}
                           >
-                            {metricLabel(target.key)} {signed(target.gap)}
+                            {metricLabel(target.key)} {PASS_MARK + target.gap}
                           </span>
                         ))}
                       </div>

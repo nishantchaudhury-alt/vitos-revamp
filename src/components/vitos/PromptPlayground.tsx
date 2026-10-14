@@ -16,6 +16,7 @@ import {
   History,
   Bot,
   MessageSquare,
+  Minus,
   MoreVertical,
   Pencil,
   Plus,
@@ -47,6 +48,7 @@ import {
 } from "./PromptTestRun";
 import { BuildPromptView } from "./BuildPrompt";
 import { BotCustomerConfig, type SavedCustomer } from "./BotCustomerConfig";
+import { CaseLimitDialog } from "./CaseLimitDialog";
 import { ViewHeader, ViewShell } from "./PlaygroundLayout";
 import { btn, eyebrow, focusRing, panel } from "./playgroundStyles";
 const BRAND = "#C72B65";
@@ -397,6 +399,9 @@ const STAGES: Stage[] = [
   },
 ];
 
+/** Hard cap on how many use cases one test can hold. */
+const MAX_CASES = 10;
+
 type PanelMode = "closed" | "generating" | "results" | "manual";
 
 export function PromptPlayground({ active, onBack }: { active: boolean; onBack: () => void }) {
@@ -405,6 +410,8 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   const [panel, setPanel] = useState<PanelMode>("closed");
   const [generated, setGenerated] = useState<UseCase[]>([]);
   const [added, setAdded] = useState<UseCase[]>([]);
+  const addedRef = useRef(added);
+  addedRef.current = added;
   const [progress, setProgress] = useState(0);
   const [round, setRound] = useState(0);
   const [panelWidth, setPanelWidth] = useState(440);
@@ -464,9 +471,18 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   const [wasActive, setWasActive] = useState(active);
   if (active !== wasActive) {
     setWasActive(active);
-    if (active && added.length > 0) {
+    // Coming back: resume a live run, or open the latest run you made this session on the
+    // Test run screen; otherwise land on your use cases.
+    const latestOwnRun = [...runHistory].reverse().find((run) => !run.id.startsWith("run-seed"));
+    if (active && liveRun) {
+      setView("run");
+    } else if (active && latestOwnRun) {
+      setSelectedRunId(latestOwnRun.id);
+      setFocusCase(null);
+      setView("run");
+    } else if (active && added.length > 0) {
       setReturned(true);
-      setView(liveRun ? "run" : "cases");
+      setView("cases");
     }
   }
   const totalMessages = runCases.reduce((sum, item) => sum + userTurns(item).length * 2, 0);
@@ -579,11 +595,10 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
       .map((fact) => `My ${fact.label.toLowerCase()} is ${fact.value}.`),
     tags: ["Bot-to-bot", `${customer.mood} · ${customer.difficulty}`],
   });
-  const canStart =
-    !generating && (added.length > 0 || (testMode === "bot" && botCustomer !== null));
+  const canStart = !generating && (testMode === "bot" ? botCustomer !== null : added.length > 0);
 
   const startTesting = () => {
-    const cases = added.length > 0 ? added : botCustomer ? [botCase(botCustomer)] : [];
+    const cases = testMode === "bot" ? (botCustomer ? [botCase(botCustomer)] : []) : added;
     if (cases.length === 0) return;
     resetRun();
     setPanel("closed");
@@ -595,7 +610,8 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   };
   const addedIds = new Set(added.map((item) => item.id));
   // Before anything is added, Chat setup shows generation inline in the setup card instead of the side panel.
-  const inSetup = view === "cases" && added.length === 0;
+  // Setup shows while there are no chat use cases yet, or whenever Bot-to-bot is the chosen method.
+  const inSetup = view === "cases" && (added.length === 0 || testMode === "bot");
   const [previewSlot, setPreviewSlot] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -607,11 +623,29 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
       setProgress(value);
       if (value >= 100) {
         window.clearInterval(id);
-        // The example pool is the library plus the saved examples, so up to 10 distinct cases come back.
+        // Generated cases are always new: skip anything already in the test, and when the
+        // example pool runs out, return labelled variants with fresh ids.
         const pool = [...USE_CASE_LIBRARY, ...seedEntries().map((entry) => entry.item)];
-        const offset = (round * 3) % pool.length;
-        const rotated = [...pool.slice(offset), ...pool.slice(0, offset)];
-        setGenerated(rotated.slice(0, count));
+        const inTest = new Set(addedRef.current.map((item) => item.id));
+        const unused = pool.filter((item) => !inTest.has(item.id));
+        const source = unused.length > 0 ? unused : pool;
+        const offset = (round * 3) % source.length;
+        const rotated = [...source.slice(offset), ...source.slice(0, offset)];
+        const runTag = Date.now().toString(36);
+        setGenerated(
+          Array.from({ length: count }, (_, i) => {
+            const item = rotated[i % rotated.length];
+            const repeat = Math.floor(i / rotated.length);
+            const clash = inTest.has(item.id) || repeat > 0;
+            return clash
+              ? {
+                  ...item,
+                  id: `${item.id}-${runTag}-${i}`,
+                  title: `${item.title} (variant ${repeat + 2})`,
+                }
+              : item;
+          }),
+        );
         setPanel("results");
       }
     }, 80);
@@ -624,8 +658,19 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
     setPanel("generating");
   };
 
-  const addCase = (item: UseCase) =>
-    setAdded((current) => (current.some((c) => c.id === item.id) ? current : [...current, item]));
+  // Every add goes through here so the 10 use case limit holds; overflow opens the limit dialog.
+  const [limitRequest, setLimitRequest] = useState<UseCase[] | null>(null);
+  const requestAdd = (items: UseCase[]) => {
+    const fresh = items.filter((item) => !added.some((c) => c.id === item.id));
+    if (fresh.length === 0) return true;
+    if (added.length + fresh.length <= MAX_CASES) {
+      setAdded([...added, ...fresh]);
+      return true;
+    }
+    setLimitRequest(fresh);
+    return false;
+  };
+  const addCase = (item: UseCase) => requestAdd([item]);
 
   const stageIndex = Math.min(STAGES.length - 1, Math.floor(progress / 34));
   const stage = STAGES[stageIndex];
@@ -746,7 +791,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                   />
                 }
               />
-            ) : added.length === 0 ? (
+            ) : added.length === 0 || testMode === "bot" ? (
               <>
                 <ViewShell>
                   <ViewHeader
@@ -757,6 +802,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                     method={testMode}
                     onMethodChange={setTestMode}
                     dimmed={generating}
+                    chatCount={added.length}
                     chat={
                       <ChatSetupBody
                         busy={generating}
@@ -804,9 +850,39 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                   setReturned(false);
                 }}
                 onGenerate={startGenerating}
+                count={count}
+                onCountChange={setCount}
+                method={testMode}
+                onMethodChange={setTestMode}
+                onNewTest={() => {
+                  // Back to the first-time landing: empty Chat setup, nothing generated or open.
+                  setAdded([]);
+                  setGenerated([]);
+                  setEditing(null);
+                  setPanel("closed");
+                  setReturned(false);
+                  setFocusCase(null);
+                  setTestMode("chat");
+                  setCount(3);
+                  setView("cases");
+                }}
                 onManual={() => {
                   setEditing(null);
                   setPanel("manual");
+                }}
+              />
+            )}
+
+            {limitRequest && (
+              <CaseLimitDialog
+                existing={added}
+                incoming={limitRequest}
+                max={MAX_CASES}
+                onCancel={() => setLimitRequest(null)}
+                onResolve={(next) => {
+                  setAdded(next);
+                  setLimitRequest(null);
+                  setPanel((current) => (current === "results" ? "closed" : current));
                 }}
               />
             )}
@@ -861,8 +937,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                       addedIds={addedIds}
                       onAdd={addCase}
                       onAddAll={() => {
-                        generated.forEach(addCase);
-                        setPanel("closed");
+                        if (requestAdd(generated)) setPanel("closed");
                       }}
                       onRegenerate={() => {
                         setRound((value) => value + 1);
@@ -896,8 +971,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                     addedIds={addedIds}
                     onAdd={addCase}
                     onAddAll={() => {
-                      generated.forEach(addCase);
-                      setPanel("closed");
+                      if (requestAdd(generated)) setPanel("closed");
                     }}
                     onRegenerate={() => {
                       setRound((value) => value + 1);
@@ -991,6 +1065,10 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
               ))}
             {view === "results" && (
               <>
+                <button type="button" className={btn.secondary}>
+                  <Sparkles className="h-4 w-4" />
+                  Enhance Prompt
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1072,28 +1150,32 @@ const TEST_METHODS = [
 // One setup surface: the test method is a decision (choice cards), not navigation, so it reads
 // differently from the Test/Build tabs above. Both bodies stay mounted to keep their input.
 // Shares the type/radius/colour scale documented at the top of BotCustomerConfig.
-function TestSetupCard({
+/** Chat / Bot-to-bot switch, shared by the setup card and the use case list so it reads the same everywhere. */
+function MethodTabs({
   method,
-  onMethodChange,
-  dimmed,
-  chat,
-  bot,
+  onChange,
+  disabled = false,
+  chatCount = 0,
+  bare = false,
+  className,
 }: {
   method: TestMode;
-  onMethodChange: (method: TestMode) => void;
-  dimmed: boolean;
-  chat: React.ReactNode;
-  bot: React.ReactNode;
+  onChange: (method: TestMode) => void;
+  disabled?: boolean;
+  chatCount?: number;
+  /** Inline in a page header: no side padding and no description. */
+  bare?: boolean;
+  className?: string;
 }) {
   return (
-    <section aria-label="Test setup" className={cn(panel, "h-fit w-full overflow-hidden")}>
-      <div className="flex items-center justify-between gap-4 px-4">
+    <div className={className}>
+      <div className={cn("flex items-center justify-between gap-4", !bare && "px-4")}>
         <div
           role="tablist"
           aria-label="Test method"
           className={cn(
             "flex items-center gap-1 transition-opacity duration-300",
-            dimmed && "pointer-events-none opacity-50",
+            disabled && "pointer-events-none opacity-50",
           )}
         >
           {TEST_METHODS.map(({ key, label, Icon }) => {
@@ -1104,10 +1186,11 @@ function TestSetupCard({
                 type="button"
                 role="tab"
                 aria-selected={active}
-                aria-disabled={dimmed}
-                onClick={() => onMethodChange(key)}
+                aria-disabled={disabled}
+                onClick={() => onChange(key)}
                 className={cn(
-                  "relative inline-flex h-12 cursor-pointer items-center gap-2 px-3 text-[13px] font-medium transition-colors duration-200",
+                  "relative inline-flex cursor-pointer items-center gap-2 text-[13px] font-medium transition-colors duration-200",
+                  bare ? "h-11 px-1 first:-ml-1 [&+&]:ml-4" : "h-12 px-3",
                   focusRing,
                   active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
@@ -1117,6 +1200,11 @@ function TestSetupCard({
                   className={cn("h-4 w-4", active ? "text-[#C72B65]" : "text-current")}
                 />
                 {label}
+                {key === "chat" && chatCount > 0 && (
+                  <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                    {chatCount}
+                  </span>
+                )}
                 <span
                   aria-hidden="true"
                   className={cn(
@@ -1128,10 +1216,39 @@ function TestSetupCard({
             );
           })}
         </div>
-        <p className="hidden truncate text-[12px] text-muted-foreground sm:block">
-          {TEST_METHODS.find((item) => item.key === method)?.description}
-        </p>
+        {!bare && (
+          <p className="hidden truncate text-[12px] text-muted-foreground sm:block">
+            {TEST_METHODS.find((item) => item.key === method)?.description}
+          </p>
+        )}
       </div>
+    </div>
+  );
+}
+
+function TestSetupCard({
+  method,
+  onMethodChange,
+  dimmed,
+  chatCount,
+  chat,
+  bot,
+}: {
+  method: TestMode;
+  onMethodChange: (method: TestMode) => void;
+  dimmed: boolean;
+  chatCount: number;
+  chat: React.ReactNode;
+  bot: React.ReactNode;
+}) {
+  return (
+    <section aria-label="Test setup" className={cn(panel, "h-fit w-full overflow-hidden")}>
+      <MethodTabs
+        method={method}
+        onChange={onMethodChange}
+        disabled={dimmed}
+        chatCount={chatCount}
+      />
       <div className="border-t border-border">
         <div className={cn("animate-fade-up", method !== "chat" && "hidden")}>{chat}</div>
         <div className={cn("animate-fade-up", method !== "bot" && "hidden")}>{bot}</div>
@@ -1309,7 +1426,65 @@ function CaseStackArt({ count }: { count: number }) {
   );
 }
 
-// Editorial-style picker: each option is a small illustration of the stack it will produce.
+const CUSTOM_MIN = 1;
+const CUSTOM_MAX = 10;
+const PRESET_COUNTS: number[] = CASE_COUNTS.map((option) => option.value);
+
+/** Custom option art: a loose pair of sheets with a counter badge showing the chosen amount. */
+function CustomStackArt({ value }: { value: number | null }) {
+  const motion =
+    "transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none";
+  return (
+    <svg viewBox="0 0 120 80" className="h-[80px] w-[120px] overflow-visible" aria-hidden="true">
+      <ellipse cx="60" cy="72" rx="24" ry="2.6" className="fill-foreground/[0.06]" />
+      <g
+        className={motion}
+        style={{ transform: "rotate(calc(-9deg * var(--spread)))", transformOrigin: "60px 70px" }}
+      >
+        <rect
+          x="42"
+          y="15"
+          width="36"
+          height="48"
+          rx="4"
+          strokeWidth="1.1"
+          strokeDasharray="3 2.5"
+          className="fill-[var(--paper-a)] stroke-[var(--ink-soft)]"
+        />
+      </g>
+      <g
+        className={motion}
+        style={{ transform: "rotate(calc(5deg * var(--spread)))", transformOrigin: "60px 70px" }}
+      >
+        <rect x="44.5" y="17.5" width="36" height="48" rx="4" className="fill-[var(--shadow)]" />
+        <rect
+          x="42"
+          y="15"
+          width="36"
+          height="48"
+          rx="4"
+          strokeWidth="1.1"
+          className="fill-white stroke-[var(--ink)]"
+        />
+        <rect x="47" y="22" width="16" height="2.4" rx="1.2" className="fill-foreground/15" />
+        <rect x="47" y="28" width="22" height="2" rx="1" className="fill-foreground/12" />
+        <rect x="47" y="33" width="18" height="2" rx="1" className="fill-foreground/12" />
+      </g>
+      <g
+        className={motion}
+        style={{ transform: "translate(calc(2px * var(--spread)), calc(-2px * var(--spread)))" }}
+      >
+        <circle cx="80" cy="54" r="11" className="fill-[var(--accent)]" />
+        <text x="80" y="58" textAnchor="middle" className="fill-white text-[11px] font-semibold">
+          {value ?? "#"}
+        </text>
+      </g>
+    </svg>
+  );
+}
+
+// Editorial-style picker: each option is a small illustration of the stack it will produce,
+// plus a Custom option with an inline stepper for any amount from 1 to 20.
 function CaseCountPicker({
   value,
   onChange,
@@ -1317,23 +1492,43 @@ function CaseCountPicker({
   value: number;
   onChange: (value: number) => void;
 }) {
+  // Custom is tracked explicitly, so a custom amount that matches a preset (e.g. 5) stays "Custom".
+  const [isCustom, setIsCustom] = useState(() => !PRESET_COUNTS.includes(value));
+  const customActive = isCustom;
+  const [customValue, setCustomValue] = useState(isCustom ? value : 7);
+  const [draft, setDraft] = useState(String(isCustom ? value : 7));
+  const clamp = (n: number) => Math.min(CUSTOM_MAX, Math.max(CUSTOM_MIN, Math.round(n)));
+  const commit = (n: number) => {
+    const next = clamp(Number.isFinite(n) ? n : customValue);
+    setCustomValue(next);
+    setDraft(String(next));
+    onChange(next);
+  };
+  const tileBase =
+    "group relative flex flex-col items-center rounded-lg border px-3 pb-3 pt-4 transition-colors duration-200";
+  const footer = "mt-0.5 flex h-7 items-center justify-center";
+
   return (
     <div
       role="radiogroup"
       aria-label="Number of use cases"
-      className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+      className="grid grid-cols-2 gap-2 sm:grid-cols-5"
     >
       {CASE_COUNTS.map((option) => {
-        const active = option.value === value;
+        const active = !isCustom && option.value === value;
         return (
           <button
             key={option.value}
             type="button"
             role="radio"
             aria-checked={active}
-            onClick={() => onChange(option.value)}
+            onClick={() => {
+              setIsCustom(false);
+              onChange(option.value);
+            }}
             className={cn(
-              "group flex cursor-pointer flex-col items-center rounded-lg border px-3 pb-3 pt-4 transition-colors duration-200",
+              tileBase,
+              "cursor-pointer",
               focusRing,
               active ? choiceActive : choiceIdle,
             )}
@@ -1342,10 +1537,83 @@ function CaseCountPicker({
             <span className="mt-3 text-[13px] font-semibold tabular-nums text-foreground">
               {option.value} {option.value === 1 ? "case" : "cases"}
             </span>
-            <span className="text-[12px] text-muted-foreground">{option.caption}</span>
+            <span className={cn(footer, "text-[12px] text-muted-foreground")}>
+              {option.caption}
+            </span>
           </button>
         );
       })}
+
+      <div className={cn(tileBase, customActive ? choiceActive : choiceIdle)}>
+        {/* The whole tile selects Custom; the stepper sits above it so its buttons stay clickable. */}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={customActive}
+          aria-label={`Custom amount, ${customValue} cases`}
+          onClick={() => {
+            if (customActive) return;
+            setIsCustom(true);
+            onChange(customValue);
+          }}
+          className={cn("absolute inset-0 cursor-pointer rounded-lg", focusRing)}
+        />
+        <span className="pointer-events-none">
+          <CustomStackArt value={customActive ? value : null} />
+        </span>
+        <span className="pointer-events-none mt-3 text-[13px] font-semibold text-foreground">
+          Custom
+        </span>
+        {customActive ? (
+          <div className={cn(footer, "relative z-10")}>
+            <div className="inline-flex h-7 items-center rounded-md border border-border bg-card">
+              <button
+                type="button"
+                onClick={() => commit(value - 1)}
+                disabled={value <= CUSTOM_MIN}
+                aria-label="Fewer use cases"
+                className="flex h-full w-7 cursor-pointer items-center justify-center rounded-l-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <input
+                value={draft}
+                inputMode="numeric"
+                aria-label="Number of custom use cases"
+                onChange={(event) =>
+                  setDraft(event.target.value.replace(/[^0-9]/g, "").slice(0, 2))
+                }
+                onBlur={() => commit(Number(draft))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") commit(Number(draft));
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    commit(value + 1);
+                  }
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    commit(value - 1);
+                  }
+                }}
+                className="h-full w-8 border-x border-border bg-transparent text-center text-[13px] font-semibold tabular-nums text-foreground outline-none focus:bg-[#C72B65]/[0.04]"
+              />
+              <button
+                type="button"
+                onClick={() => commit(value + 1)}
+                disabled={value >= CUSTOM_MAX}
+                aria-label="More use cases"
+                className="flex h-full w-7 cursor-pointer items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <span className={cn(footer, "pointer-events-none text-[12px] text-muted-foreground")}>
+            Any amount
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1765,11 +2033,11 @@ function CaseIconButton({
       title={label}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition-colors",
+        "inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors",
         focusRing,
         active
-          ? "border-[#C72B65]/40 bg-[#FBE7EF] text-[#C72B65]"
-          : "border-[#C72B65]/30 bg-card text-[#C72B65] hover:border-[#C72B65]/60 hover:bg-[#FBE7EF]",
+          ? "bg-[#C72B65]/[0.06] text-[#C72B65]"
+          : "text-muted-foreground hover:bg-[#C72B65]/[0.06] hover:text-[#C72B65]",
       )}
     >
       {children}
@@ -1778,43 +2046,74 @@ function CaseIconButton({
 }
 
 function CaseCardBody({ item }: { item: UseCase }) {
+  const turns = [item.opener, ...item.followUps];
   return (
-    <>
+    <div className="flex flex-1 flex-col">
       {item.description && (
-        <p className="mt-2.5 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+        <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
           {item.description}
         </p>
       )}
-      <div className="mt-2.5 flex gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C72B65]" />
-        <p className="text-[13px] leading-relaxed text-foreground">&ldquo;{item.opener}&rdquo;</p>
-      </div>
-      {item.followUps.length > 0 && (
-        <ul className="mt-2.5 space-y-1">
-          {item.followUps.map((line) => (
-            <li key={line} className="flex gap-2 text-[12px] leading-relaxed text-muted-foreground">
-              <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              {line}
+      <div className="mt-3 flex-1 rounded-lg bg-muted/40 px-3 py-2.5">
+        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          <MessageSquare className="h-3 w-3" aria-hidden="true" />
+          Customer turns · {turns.length}
+        </p>
+        <ol className="relative space-y-2">
+          <span aria-hidden="true" className="absolute bottom-2 left-[9px] top-2 w-px bg-border" />
+          {turns.map((line, i) => (
+            <li key={`${i}-${line}`} className="relative flex gap-2.5">
+              <span
+                className={cn(
+                  "relative z-10 mt-px flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
+                  i === 0
+                    ? "bg-[#C72B65] text-white"
+                    : "bg-card text-muted-foreground ring-1 ring-border",
+                )}
+              >
+                {i + 1}
+              </span>
+              <p
+                className={cn(
+                  "line-clamp-2 text-[13px] leading-relaxed",
+                  i === 0 ? "font-medium text-foreground" : "text-foreground/75",
+                )}
+              >
+                {i === 0 ? <>&ldquo;{line}&rdquo;</> : line}
+              </p>
             </li>
           ))}
-        </ul>
-      )}
-    </>
+        </ol>
+      </div>
+    </div>
   );
 }
 
+const DIFFICULTY_DOT: Record<string, string> = {
+  Easy: "bg-emerald-500",
+  Medium: "bg-amber-500",
+  Hard: "bg-red-500",
+};
+
+/** One quiet meta line: difficulty with a coloured dot, then the other tags. */
 function CaseTags({ tags }: { tags: string[] }) {
+  const difficulty = tags.find((tag) => tag in DIFFICULTY_DOT);
+  const rest = tags.filter((tag) => tag !== difficulty);
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="rounded-full border border-border bg-card px-2 py-px text-[11px] text-muted-foreground"
-        >
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[12px] text-muted-foreground">
+      {difficulty && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className={cn("h-1.5 w-1.5 rounded-full", DIFFICULTY_DOT[difficulty])} />
+          {difficulty}
+        </span>
+      )}
+      {rest.map((tag) => (
+        <span key={tag} className="inline-flex items-center gap-2">
+          {difficulty || rest.indexOf(tag) > 0 ? <span aria-hidden="true">·</span> : null}
           {tag}
         </span>
       ))}
-    </div>
+    </p>
   );
 }
 
@@ -1862,6 +2161,179 @@ function SavedDatesCalendar({
   );
 }
 
+/** Menu marks drawn on one 24px grid: a fanned pair of cards with a plus badge. */
+function AddCardsMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
+      <rect
+        x="3.5"
+        y="5.5"
+        width="10"
+        height="13"
+        rx="2"
+        transform="rotate(-8 8.5 12)"
+        stroke="currentColor"
+        strokeOpacity="0.45"
+        strokeWidth="1.4"
+      />
+      <rect
+        x="7.5"
+        y="4.5"
+        width="10"
+        height="13"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="fill-card"
+      />
+      <path
+        d="M10 8.5h5M10 11h3.5"
+        stroke="currentColor"
+        strokeOpacity="0.55"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+      <circle cx="18" cy="18" r="4" className="fill-[#C72B65]" />
+      <path d="M18 16.2v3.6M16.2 18h3.6" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** A test flask with a spark: a fresh run from scratch. */
+function NewTestMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
+      <path
+        d="M9.5 3.5h5M10.5 3.5v5.2l-4.6 8.1A2 2 0 0 0 7.6 20h8.8a2 2 0 0 0 1.7-3.2l-4.6-8.1V3.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 14.5h8"
+        stroke="currentColor"
+        strokeOpacity="0.5"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18.2 2.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"
+        className="fill-[#C72B65]"
+      />
+    </svg>
+  );
+}
+
+/** Popover behind "Add more": how many to generate, how much room is left, or write one by hand. */
+function AddMorePanel({
+  used,
+  count,
+  onCountChange,
+  onGenerate,
+  onManual,
+}: {
+  used: number;
+  count: number;
+  onCountChange: (value: number) => void;
+  onGenerate: () => void;
+  onManual: () => void;
+}) {
+  const free = Math.max(0, MAX_CASES - used);
+  const presets = [1, 3, 5, 10];
+  const overflow = count > free;
+  return (
+    <div className="absolute right-0 top-full z-30 mt-1.5 w-[320px] rounded-xl border border-border bg-card p-4 shadow-lg animate-fade-up">
+      <div className="flex items-center justify-between">
+        <p className="text-[14px] font-semibold text-foreground">Add use cases</p>
+        <span className="text-[12px] tabular-nums text-muted-foreground">
+          {used}/{MAX_CASES} used
+        </span>
+      </div>
+      <div className="mt-2 flex gap-0.5" aria-hidden="true">
+        {Array.from({ length: MAX_CASES }, (_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-1.5 flex-1 rounded-full transition-colors",
+              i < used
+                ? "bg-foreground/30"
+                : i < used + count
+                  ? i < MAX_CASES
+                    ? "bg-[#C72B65]"
+                    : "bg-red-400"
+                  : "bg-muted",
+            )}
+          />
+        ))}
+      </div>
+
+      <p className="mt-4 text-[13px] font-medium text-foreground">How many should AI generate?</p>
+      <div role="radiogroup" aria-label="How many to generate" className="mt-2 flex gap-1.5">
+        {presets.map((n) => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={count === n}
+            onClick={() => onCountChange(n)}
+            className={cn(
+              "h-8 flex-1 cursor-pointer rounded-lg border text-[13px] font-medium tabular-nums transition-colors",
+              focusRing,
+              count === n
+                ? "border-[#C72B65] bg-[#C72B65]/[0.04] text-[#C72B65]"
+                : "border-border text-foreground/80 hover:border-foreground/25",
+            )}
+          >
+            {n}
+          </button>
+        ))}
+        <label
+          className={cn(
+            "flex h-8 w-14 items-center rounded-lg border px-2 transition-colors focus-within:border-[#C72B65]",
+            presets.includes(count) ? "border-border" : "border-[#C72B65] bg-[#C72B65]/[0.04]",
+          )}
+        >
+          <span className="sr-only">Custom amount</span>
+          <input
+            inputMode="numeric"
+            placeholder="#"
+            value={presets.includes(count) ? "" : String(count)}
+            onChange={(event) => {
+              const n = Number(event.target.value.replace(/[^0-9]/g, ""));
+              if (n) onCountChange(Math.min(MAX_CASES, Math.max(1, n)));
+            }}
+            className="w-full bg-transparent text-center text-[13px] font-medium tabular-nums text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </label>
+      </div>
+      <p
+        className={cn(
+          "mt-2 text-[12px] leading-snug",
+          overflow ? "text-amber-700" : "text-muted-foreground",
+        )}
+      >
+        {free === 0
+          ? `You're at the ${MAX_CASES} use case limit. You'll choose what to replace.`
+          : overflow
+            ? `Only ${free} ${free === 1 ? "slot is" : "slots are"} free. You'll choose what to keep.`
+            : `${free} of ${MAX_CASES} slots free.`}
+      </p>
+
+      <div className="mt-4 flex gap-2">
+        <button type="button" onClick={onManual} className={cn(btn.secondary, "flex-1")}>
+          <Pencil className="h-4 w-4" />
+          Write
+        </button>
+        <button type="button" onClick={onGenerate} className={cn(btn.primary, "flex-[1.4]")}>
+          <Sparkles className="h-4 w-4" />
+          Generate {count}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AddedCasesList({
   cases,
   saved,
@@ -1874,7 +2346,17 @@ function AddedCasesList({
   onClearAll,
   onGenerate,
   onManual,
+  count,
+  onCountChange,
+  method,
+  onMethodChange,
+  onNewTest,
 }: {
+  onNewTest: () => void;
+  count: number;
+  onCountChange: (value: number) => void;
+  method: TestMode;
+  onMethodChange: (method: TestMode) => void;
   cases: UseCase[];
   saved: SavedCase[];
   recent: boolean;
@@ -1887,7 +2369,7 @@ function AddedCasesList({
   onGenerate: () => void;
   onManual: () => void;
 }) {
-  const [menu, setMenu] = useState<"add" | "more" | null>(null);
+  const [menu, setMenu] = useState<"add" | "add-more" | "new-test" | "more" | null>(null);
   const [view, setView] = useState<"cases" | "saved">("cases");
   const [pickedDate, setPickedDate] = useState<Date | undefined>();
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -1920,7 +2402,12 @@ function AddedCasesList({
           onClick={() => setMenu(null)}
         />
       )}
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3",
+          showSaved ? "min-h-9" : "-mt-2 border-b border-border",
+        )}
+      >
         {showSaved ? (
           <div className="flex items-center gap-2">
             <button
@@ -1939,19 +2426,15 @@ function AddedCasesList({
             </h2>
           </div>
         ) : (
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-[16px] font-semibold text-foreground">
-              Use cases
-              <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
-                {cases.length}
-              </span>
-            </h2>
-            {recent && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C72B65]/25 bg-[#FBE7EF] px-2.5 py-1 text-[12px] font-medium text-[#C72B65] animate-fade-up">
-                <History className="h-3 w-3" />
-                Recent use cases
-              </span>
-            )}
+          <div className="flex items-center gap-3">
+            <h2 className="sr-only">Use cases</h2>
+            <MethodTabs
+              bare
+              method={method}
+              onChange={onMethodChange}
+              disabled={busy}
+              chatCount={cases.length}
+            />
           </div>
         )}
         {showSaved ? (
@@ -2026,47 +2509,113 @@ function AddedCasesList({
               className={btn.secondary}
             >
               <Bookmark className="h-4 w-4" />
-              Saved
+              Saved use cases
               <span className="tabular-nums text-muted-foreground">{saved.length}</span>
             </button>
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setMenu(menu === "add" ? null : "add")}
+                onClick={() =>
+                  setMenu(
+                    menu === "add" || menu === "add-more" || menu === "new-test" ? null : "add",
+                  )
+                }
                 disabled={busy}
-                aria-expanded={menu === "add"}
+                aria-haspopup="menu"
+                aria-expanded={menu === "add" || menu === "add-more" || menu === "new-test"}
                 className={btn.primary}
               >
                 <Plus className="h-4 w-4" />
-                Add more
+                Add
               </button>
               {menu === "add" && (
-                <div className="absolute right-0 top-full z-30 mt-1.5 w-48 rounded-xl border border-border bg-card p-1 shadow-lg animate-fade-up">
-                  <button
-                    type="button"
-                    className={menuItem}
-                    onClick={() => {
-                      setMenu(null);
-                      setView("cases");
-                      onGenerate();
-                    }}
-                  >
-                    <Sparkles className="h-3.5 w-3.5 text-[#C72B65]" />
-                    Generate with AI
-                  </button>
-                  <button
-                    type="button"
-                    className={menuItem}
-                    onClick={() => {
-                      setMenu(null);
-                      setView("cases");
-                      onManual();
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                    Add manually
-                  </button>
+                <div
+                  role="menu"
+                  aria-label="Add"
+                  className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-border bg-card p-1 shadow-lg animate-fade-up"
+                >
+                  {[
+                    {
+                      key: "add-more" as const,
+                      Icon: AddCardsMark,
+                      title: "Add more use cases",
+                      body: "Generate or write more for this test",
+                    },
+                    {
+                      key: "new-test" as const,
+                      Icon: NewTestMark,
+                      title: "New test",
+                      body: "Start over from the setup screen",
+                    },
+                  ].map(({ key, Icon, title, body }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => setMenu(key)}
+                      className={cn(
+                        "group flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/70",
+                        focusRing,
+                      )}
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-foreground/70 transition-colors duration-200 group-hover:border-[#C72B65]/30 group-hover:bg-[#C72B65]/[0.05] group-hover:text-[#C72B65]">
+                        <Icon aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-medium text-foreground">
+                          {title}
+                        </span>
+                        <span className="block text-[12px] text-muted-foreground">{body}</span>
+                      </span>
+                    </button>
+                  ))}
                 </div>
+              )}
+              {menu === "new-test" && (
+                <div
+                  role="alertdialog"
+                  aria-label="Start a new test"
+                  className="absolute right-0 top-full z-30 mt-1.5 w-[300px] rounded-xl border border-border bg-card p-4 shadow-lg animate-fade-up"
+                >
+                  <p className="text-[14px] font-semibold text-foreground">Start a new test?</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                    Your {cases.length} use {cases.length === 1 ? "case" : "cases"} will be cleared
+                    from this test. Saved use cases and past results stay.
+                  </p>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button type="button" onClick={() => setMenu("add")} className={btn.ghost}>
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenu(null);
+                        setView("cases");
+                        onNewTest();
+                      }}
+                      className={btn.primary}
+                    >
+                      Start new test
+                    </button>
+                  </div>
+                </div>
+              )}
+              {menu === "add-more" && (
+                <AddMorePanel
+                  used={cases.length}
+                  count={count}
+                  onCountChange={onCountChange}
+                  onGenerate={() => {
+                    setMenu(null);
+                    setView("cases");
+                    onGenerate();
+                  }}
+                  onManual={() => {
+                    setMenu(null);
+                    setView("cases");
+                    onManual();
+                  }}
+                />
               )}
             </div>
             <div className="relative">
@@ -2166,11 +2715,11 @@ function AddedCasesList({
                     </span>
                     <span className="h-px flex-1 bg-border" aria-hidden="true" />
                   </div>
-                  <div className="grid items-start gap-3 xl:grid-cols-2">
+                  <div className="grid items-stretch gap-3 xl:grid-cols-2">
                     {group.entries.map(({ item, savedAt, result }) => {
                       const inRun = addedIds.has(item.id);
                       return (
-                        <article key={item.id} className={cn(panel, "p-4")}>
+                        <article key={item.id} className={cn(panel, "flex flex-col p-4")}>
                           <div className="flex items-start gap-3">
                             <div className="min-w-0 flex-1">
                               <h4 className="text-[14px] font-semibold leading-snug text-foreground">
@@ -2232,21 +2781,27 @@ function AddedCasesList({
             </div>
           )
         ) : (
-          <div className="grid items-start gap-3 xl:grid-cols-2">
+          <div className="grid items-stretch gap-3 xl:grid-cols-2">
             {cases.map((item, i) => {
               return (
-                <article key={item.id} className={cn(panel, "p-4 animate-fade-up")}>
+                <article
+                  key={item.id}
+                  className={cn(
+                    panel,
+                    "flex flex-col p-4 transition-shadow duration-200 animate-fade-up hover:shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_-12px_rgba(16,24,40,0.2)]",
+                  )}
+                >
                   <div className="flex items-start gap-3">
-                    <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FBE7EF] text-[11px] font-semibold text-[#C72B65]">
-                      {i + 1}
+                    <span className="mt-0.5 font-mono text-[12px] font-medium tabular-nums text-muted-foreground/70">
+                      {String(i + 1).padStart(2, "0")}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-[14px] font-semibold leading-snug text-foreground">
+                      <h3 className="line-clamp-1 text-[14px] font-semibold leading-snug text-foreground">
                         {item.title}
                       </h3>
                       <CaseTags tags={item.tags} />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
                       <CaseIconButton label="Edit use case" onClick={() => onEdit(item)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </CaseIconButton>
@@ -2262,6 +2817,15 @@ function AddedCasesList({
           </div>
         )}
       </div>
+      {/* Floats at the bottom left of the card area while you scroll, after returning to the playground. */}
+      {recent && !showSaved && (
+        <div className="pointer-events-none sticky bottom-3 z-10 mt-auto flex">
+          <span className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-[#C72B65]/25 bg-card/95 px-3 py-1.5 text-[12px] font-medium text-[#C72B65] shadow-[0_6px_16px_-8px_rgba(16,24,40,0.3)] backdrop-blur animate-fade-up">
+            <History className="h-3.5 w-3.5" />
+            Recent use cases
+          </span>
+        </div>
+      )}
     </ViewShell>
   );
 }

@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { btn } from "./playgroundStyles";
 
-/** The one content column every playground screen sits in: same width, padding and rhythm. */
+/** The one content area every playground screen sits in: full width, same padding and rhythm. */
 export function ViewShell({
   children,
   fill = false,
@@ -16,7 +16,7 @@ export function ViewShell({
   return (
     <div
       className={cn(
-        "mx-auto flex w-full max-w-[1200px] flex-col gap-4 px-6 py-5",
+        "flex w-full flex-col gap-4 px-6 py-5",
         fill ? "min-h-0 flex-1" : "flex-1",
         className,
       )}
