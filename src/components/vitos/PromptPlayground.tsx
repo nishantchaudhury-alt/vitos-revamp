@@ -14,6 +14,7 @@ import {
   FlaskConical,
   GripVertical,
   History,
+  Bot,
   MessageSquare,
   MoreVertical,
   Pencil,
@@ -44,7 +45,10 @@ import {
   type RunRecord,
   type RunStatus,
 } from "./PromptTestRun";
-
+import { BuildPromptView } from "./BuildPrompt";
+import { BotCustomerConfig, type SavedCustomer } from "./BotCustomerConfig";
+import { ViewHeader, ViewShell } from "./PlaygroundLayout";
+import { btn, eyebrow, focusRing, panel } from "./playgroundStyles";
 const BRAND = "#C72B65";
 
 const MODELS = [
@@ -125,6 +129,8 @@ const USE_CASE_LIBRARY: UseCase[] = [
     tags: ["Edge case", "Hard"],
   },
 ];
+
+const NO_TYPING: Set<string> = new Set();
 
 type SavedCase = { item: UseCase; savedAt: number; result?: number };
 
@@ -401,7 +407,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   const [added, setAdded] = useState<UseCase[]>([]);
   const [progress, setProgress] = useState(0);
   const [round, setRound] = useState(0);
-  const [panelWidth, setPanelWidth] = useState(520);
+  const [panelWidth, setPanelWidth] = useState(440);
   const [saved, setSaved] = useState<SavedCase[]>(seedSavedCases);
   const [editing, setEditing] = useState<UseCase | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -413,7 +419,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   const [runCases, setRunCases] = useState<UseCase[]>([]);
   const [runStatuses, setRunStatuses] = useState<Record<string, RunStatus>>({});
   const [transcripts, setTranscripts] = useState<Record<string, RunMessage[]>>({});
-  const [typingId, setTypingId] = useState<string | null>(null);
+  const [typingIds, setTypingIds] = useState<Set<string>>(() => new Set());
   const [messagesDone, setMessagesDone] = useState(0);
   const [runDone, setRunDone] = useState(false);
   const [runHistory, setRunHistory] = useState<RunRecord[]>(seedRuns);
@@ -450,6 +456,9 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
   const selectRun = (id: string) => {
     setSelectedRunId(id);
   };
+  const [mode, setMode] = useState<"test" | "build">("test");
+  const [testMode, setTestMode] = useState<TestMode>("chat");
+  const [botCustomer, setBotCustomer] = useState<SavedCustomer | null>(null);
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const [returned, setReturned] = useState(false);
   const [wasActive, setWasActive] = useState(active);
@@ -470,28 +479,62 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
     const schedule = (fn: () => void, ms: number) =>
       timers.push(window.setTimeout(() => !cancelled && fn(), ms));
     let done = 0;
+    let finished = 0;
     const push = (id: string, message: RunMessage) =>
       setTranscripts((current) => ({ ...current, [id]: [...(current[id] ?? []), message] }));
-    const steps: (() => number)[] = [];
-    runCases.forEach((item) => {
+    const setTyping = (id: string, on: boolean) =>
+      setTypingIds((current) => {
+        const next = new Set(current);
+        if (on) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+
+    const finishRun = () => {
+      schedule(() => {
+        setRunDone(true);
+        const record = completedRun(`run-${runId}`, runCases, Date.now());
+        setRunHistory((current) => [...current, record]);
+        setSelectedRunId(record.id);
+        const tested = new Map(runCases.map((item) => [item.id, caseScore(outcomeFor(item))]));
+        setSaved((current) =>
+          current.map((entry) =>
+            tested.has(entry.item.id) ? { ...entry, result: tested.get(entry.item.id) } : entry,
+          ),
+        );
+        schedule(() => {
+          setView("results");
+          setRunId(0);
+          setTypingIds(new Set());
+          setMessagesDone(0);
+          setRunDone(false);
+        }, 900);
+      }, 500);
+    };
+
+    // Every use case runs on its own timeline, started together and paced slightly differently
+    // so the conversations progress side by side instead of in lockstep.
+    runCases.forEach((item, index) => {
       const outcome = outcomeFor(item);
+      const pace = 0.85 + ((index * 3) % 5) * 0.1;
+      const steps: (() => number)[] = [];
       steps.push(() => {
         setRunStatuses((current) => ({ ...current, [item.id]: "running" }));
-        return 500;
+        return 450 * pace;
       });
       userTurns(item).forEach((text, i) => {
         steps.push(() => {
           push(item.id, { role: "user", text });
           setMessagesDone(++done);
-          setTypingId(item.id);
-          return 1500;
+          setTyping(item.id, true);
+          return 1500 * pace;
         });
         steps.push(() => {
           const reply = outcome.replies[i] ?? outcome.replies[outcome.replies.length - 1];
-          setTypingId(null);
+          setTyping(item.id, false);
           push(item.id, { role: "bot", text: reply.text, rating: reply.rating });
           setMessagesDone(++done);
-          return 700;
+          return 700 * pace;
         });
       });
       steps.push(() => {
@@ -499,36 +542,16 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
           ...current,
           [item.id]: casePassed(outcome) ? "passed" : "failed",
         }));
-        return 600;
+        if (++finished === runCases.length) finishRun();
+        return 0;
       });
+      const run = (i: number) => {
+        if (i >= steps.length) return;
+        const delay = steps[i]();
+        schedule(() => run(i + 1), delay);
+      };
+      schedule(() => run(0), 400 + index * 140);
     });
-    steps.push(() => {
-      setRunDone(true);
-      const record = completedRun(`run-${runId}`, runCases, Date.now());
-      setRunHistory((current) => [...current, record]);
-      setSelectedRunId(record.id);
-      const tested = new Map(runCases.map((item) => [item.id, caseScore(outcomeFor(item))]));
-      setSaved((current) =>
-        current.map((entry) =>
-          tested.has(entry.item.id) ? { ...entry, result: tested.get(entry.item.id) } : entry,
-        ),
-      );
-      return 900;
-    });
-    steps.push(() => {
-      setView("results");
-      setRunId(0);
-      setTypingId(null);
-      setMessagesDone(0);
-      setRunDone(false);
-      return 0;
-    });
-    const run = (i: number) => {
-      if (i >= steps.length) return;
-      const delay = steps[i]();
-      schedule(() => run(i + 1), delay);
-    };
-    schedule(() => run(0), 400);
     return () => {
       cancelled = true;
       timers.forEach((t) => window.clearTimeout(t));
@@ -540,21 +563,40 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
     setRunCases([]);
     setRunStatuses({});
     setTranscripts({});
-    setTypingId(null);
+    setTypingIds(new Set());
     setMessagesDone(0);
     setRunDone(false);
   };
 
+  // A saved test customer runs as a single conversation driven by its goal and known facts.
+  const botCase = (customer: SavedCustomer): UseCase => ({
+    id: "bot-customer",
+    title: `Test customer: ${customer.goal.length > 52 ? `${customer.goal.slice(0, 50)}…` : customer.goal}`,
+    description: customer.goal,
+    opener: customer.goal,
+    followUps: customer.facts
+      .slice(0, 2)
+      .map((fact) => `My ${fact.label.toLowerCase()} is ${fact.value}.`),
+    tags: ["Bot-to-bot", `${customer.mood} · ${customer.difficulty}`],
+  });
+  const canStart =
+    !generating && (added.length > 0 || (testMode === "bot" && botCustomer !== null));
+
   const startTesting = () => {
+    const cases = added.length > 0 ? added : botCustomer ? [botCase(botCustomer)] : [];
+    if (cases.length === 0) return;
     resetRun();
     setPanel("closed");
     setEditing(null);
-    setRunCases(added);
-    setRunStatuses(Object.fromEntries(added.map((item) => [item.id, "queued" as RunStatus])));
+    setRunCases(cases);
+    setRunStatuses(Object.fromEntries(cases.map((item) => [item.id, "queued" as RunStatus])));
     setView("run");
     setRunId(Date.now());
   };
   const addedIds = new Set(added.map((item) => item.id));
+  // Before anything is added, Chat setup shows generation inline in the setup card instead of the side panel.
+  const inSetup = view === "cases" && added.length === 0;
+  const [previewSlot, setPreviewSlot] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!generating) return;
@@ -565,8 +607,10 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
       setProgress(value);
       if (value >= 100) {
         window.clearInterval(id);
-        const offset = round % USE_CASE_LIBRARY.length;
-        const rotated = [...USE_CASE_LIBRARY.slice(offset), ...USE_CASE_LIBRARY.slice(0, offset)];
+        // The example pool is the library plus the saved examples, so up to 10 distinct cases come back.
+        const pool = [...USE_CASE_LIBRARY, ...seedEntries().map((entry) => entry.item)];
+        const offset = (round * 3) % pool.length;
+        const rotated = [...pool.slice(offset), ...pool.slice(0, offset)];
         setGenerated(rotated.slice(0, count));
         setPanel("results");
       }
@@ -607,7 +651,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col bg-muted/20 p-4 sm:p-5", !active && "hidden")}>
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-2.5">
           <button
             type="button"
@@ -619,53 +663,71 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="text-[14px] font-semibold leading-5 text-foreground">
-              Prompt test and analysis
+              {mode === "build" ? "Build and optimize your prompt" : "Prompt test and analysis"}
             </h1>
             <p className="text-[12px] leading-4 text-muted-foreground">
-              Simulate real use cases, analyze results, and improve prompt quality.
+              {mode === "build"
+                ? "Create prompts from scratch, test with real use cases, and refine for better results."
+                : "Simulate real use cases, analyze results, and improve prompt quality."}
             </p>
           </div>
-          <div className="inline-flex items-center rounded-full border border-border bg-muted/40 p-0.5">
-            <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-[#C72B65] px-3 text-[12px] font-medium text-white shadow-sm">
-              <FlaskConical className="h-3 w-3" />
-              Test Prompt
-            </span>
-            <button
-              type="button"
-              className="inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium text-muted-foreground transition hover:text-foreground"
-            >
-              <Pencil className="h-3 w-3" />
-              Build Prompt
-            </button>
+          <div
+            role="tablist"
+            aria-label="Prompt mode"
+            className="inline-flex items-center rounded-full border border-border bg-muted/40 p-0.5"
+          >
+            {(
+              [
+                { key: "test", label: "Test Prompt", Icon: FlaskConical },
+                { key: "build", label: "Build Prompt", Icon: Pencil },
+              ] as const
+            ).map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={mode === key}
+                onClick={() => setMode(key)}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35",
+                  mode === key
+                    ? "bg-[#C72B65] text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
           </div>
         </header>
 
-        <div ref={bodyRef} className="relative flex min-h-0 flex-1">
+        {mode === "build" && <BuildPromptView />}
+
+        <div
+          ref={bodyRef}
+          className={cn("relative flex min-h-0 flex-1", mode === "build" && "hidden")}
+        >
           <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {view === "run" && (liveRun || selectedRun) ? (
               <TestRunView
                 cases={liveRun ? runCases : selectedRun.cases}
                 statuses={liveRun ? runStatuses : selectedRun.statuses}
                 transcripts={liveRun ? transcripts : selectedRun.transcripts}
-                typingId={liveRun ? typingId : null}
+                typingIds={liveRun ? typingIds : NO_TYPING}
                 progress={liveRun ? runProgress : 100}
                 focusId={liveRun ? null : focusCase}
-                headerRight={
+                meta={
                   liveRun ? (
-                    <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 text-[12.5px] font-medium text-blue-600">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-blue-600">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
-                      Live run
+                      Live
                     </span>
                   ) : (
-                    <span className="flex items-center gap-3">
-                      <span className="text-[12.5px] text-muted-foreground">
-                        <span className="font-medium text-foreground">{selectedOption?.title}</span>{" "}
-                        · {selectedOption?.meta}
-                      </span>
-                      {historyButton}
-                    </span>
+                    `${selectedOption?.title} · ${selectedOption?.meta}`
                   )
                 }
+                headerRight={liveRun ? undefined : historyButton}
               />
             ) : view === "results" && selectedRun ? (
               <TestResultsView
@@ -677,33 +739,47 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                   setView("run");
                 }}
                 header={
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-[15px] font-semibold text-foreground">Run results</h2>
-                      <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-                        <span className="font-medium text-foreground">{selectedOption?.title}</span>{" "}
-                        · {selectedOption?.meta}
-                      </p>
-                    </div>
-                    {historyButton}
-                  </div>
+                  <ViewHeader
+                    title="Run results"
+                    meta={`${selectedOption?.title} · ${selectedOption?.meta}`}
+                    actions={historyButton}
+                  />
                 }
               />
             ) : added.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center p-6">
-                <EmptyStateCard
-                  dimmed={generating}
-                  model={model}
-                  onModelChange={setModel}
-                  count={count}
-                  onCountChange={setCount}
-                  onGenerate={startGenerating}
-                  onManual={() => {
-                    setEditing(null);
-                    setPanel("manual");
-                  }}
-                />
-              </div>
+              <>
+                <ViewShell>
+                  <ViewHeader
+                    title="Set up your test"
+                    meta="Choose how the conversation is simulated, then add what to test."
+                  />
+                  <TestSetupCard
+                    method={testMode}
+                    onMethodChange={setTestMode}
+                    dimmed={generating}
+                    chat={
+                      <ChatSetupBody
+                        busy={generating}
+                        model={model}
+                        onModelChange={setModel}
+                        count={count}
+                        onCountChange={setCount}
+                        onGenerate={startGenerating}
+                        onManual={() => {
+                          setEditing(null);
+                          setPanel("manual");
+                        }}
+                      />
+                    }
+                    bot={
+                      <BotCustomerConfig
+                        onSavedChange={setBotCustomer}
+                        previewTarget={testMode === "bot" ? previewSlot : null}
+                      />
+                    }
+                  />
+                </ViewShell>
+              </>
             ) : (
               <AddedCasesList
                 cases={added}
@@ -735,7 +811,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
               />
             )}
 
-            {generating && view === "cases" && (
+            {generating && view === "cases" && !inSetup && (
               <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center px-6">
                 <ProgressToast
                   progress={progress}
@@ -755,7 +831,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
             />
           )}
 
-          {view === "cases" && panel !== "closed" && (
+          {view === "cases" && (panel !== "closed" || inSetup) && (
             <>
               <button
                 type="button"
@@ -771,7 +847,30 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                 style={{ width: panelWidth }}
                 className="flex min-h-0 max-w-[60%] shrink-0 flex-col bg-card animate-slide-in"
               >
-                {panel === "manual" ? (
+                {inSetup && panel !== "manual" ? (
+                  testMode === "bot" ? (
+                    <div ref={setPreviewSlot} className="flex h-full min-h-0 flex-col" />
+                  ) : (
+                    <GeneratedPreview
+                      state={generating ? "loading" : panel === "results" ? "ready" : "idle"}
+                      count={count}
+                      progress={progress}
+                      stageTitle={stage.title}
+                      stageDetail={stage.detail(stageStep, count)}
+                      cases={generated}
+                      addedIds={addedIds}
+                      onAdd={addCase}
+                      onAddAll={() => {
+                        generated.forEach(addCase);
+                        setPanel("closed");
+                      }}
+                      onRegenerate={() => {
+                        setRound((value) => value + 1);
+                        startGenerating();
+                      }}
+                    />
+                  )
+                ) : panel === "manual" ? (
                   <ManualCasePanel
                     key={editing?.id ?? "new"}
                     initial={editing}
@@ -812,7 +911,12 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
           )}
         </div>
 
-        <footer className="relative flex shrink-0 items-center justify-center border-t border-border px-4 py-2">
+        <footer
+          className={cn(
+            "relative flex shrink-0 items-center justify-center border-t border-border px-4 py-2",
+            mode === "build" && "hidden",
+          )}
+        >
           <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
             {(
               [
@@ -859,8 +963,8 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
               <button
                 type="button"
                 onClick={startTesting}
-                disabled={added.length === 0 || generating}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355] disabled:cursor-not-allowed disabled:bg-[#C72B65]/45 disabled:shadow-none"
+                disabled={!canStart}
+                className={btn.primary}
               >
                 Start Testing
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -868,11 +972,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
             )}
             {view === "run" &&
               (!liveRun ? (
-                <button
-                  type="button"
-                  onClick={() => setView("results")}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
-                >
+                <button type="button" onClick={() => setView("results")} className={btn.primary}>
                   View results
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
@@ -883,7 +983,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                     resetRun();
                     setView("cases");
                   }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-red-300 bg-card px-3.5 text-[12.5px] font-medium text-red-600 transition hover:bg-red-50"
+                  className={btn.danger}
                 >
                   <span className="h-3 w-3 rounded-[3px] bg-red-500" />
                   Stop
@@ -897,7 +997,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
                     resetRun();
                     setView("cases");
                   }}
-                  className="inline-flex h-8 items-center rounded-full bg-[#C72B65] px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355]"
+                  className={btn.primary}
                 >
                   New Test
                 </button>
@@ -911,9 +1011,7 @@ export function PromptPlayground({ active, onBack }: { active: boolean; onBack: 
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="mb-1.5 block text-[12px] font-medium text-foreground/80">{children}</span>
-  );
+  return <span className="mb-2 block text-[13px] font-medium text-foreground">{children}</span>;
 }
 
 function SelectField({
@@ -933,7 +1031,7 @@ function SelectField({
 }) {
   const current = options.find((option) => option.value === value);
   return (
-    <div className="relative flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground shadow-sm transition focus-within:border-[#C72B65]/40 focus-within:ring-2 focus-within:ring-[#C72B65]/10 hover:border-foreground/20">
+    <div className="relative flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground transition focus-within:border-[#C72B65]/40 focus-within:ring-2 focus-within:ring-[#C72B65]/10 hover:border-foreground/20">
       {icon}
       <span className="min-w-0 flex-1 truncate">{current?.label}</span>
       <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -954,8 +1052,98 @@ function SelectField({
   );
 }
 
-function EmptyStateCard({
+type TestMode = "chat" | "bot";
+
+const TEST_METHODS = [
+  {
+    key: "chat",
+    label: "Chat",
+    description: "Run use cases you write or generate with AI.",
+    Icon: MessageSquare,
+  },
+  {
+    key: "bot",
+    label: "Bot-to-bot",
+    description: "An AI customer pursues a goal, unscripted.",
+    Icon: Bot,
+  },
+] as const;
+
+// One setup surface: the test method is a decision (choice cards), not navigation, so it reads
+// differently from the Test/Build tabs above. Both bodies stay mounted to keep their input.
+// Shares the type/radius/colour scale documented at the top of BotCustomerConfig.
+function TestSetupCard({
+  method,
+  onMethodChange,
   dimmed,
+  chat,
+  bot,
+}: {
+  method: TestMode;
+  onMethodChange: (method: TestMode) => void;
+  dimmed: boolean;
+  chat: React.ReactNode;
+  bot: React.ReactNode;
+}) {
+  return (
+    <section aria-label="Test setup" className={cn(panel, "h-fit w-full overflow-hidden")}>
+      <div className="flex items-center justify-between gap-4 px-4">
+        <div
+          role="tablist"
+          aria-label="Test method"
+          className={cn(
+            "flex items-center gap-1 transition-opacity duration-300",
+            dimmed && "pointer-events-none opacity-50",
+          )}
+        >
+          {TEST_METHODS.map(({ key, label, Icon }) => {
+            const active = method === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-disabled={dimmed}
+                onClick={() => onMethodChange(key)}
+                className={cn(
+                  "relative inline-flex h-12 cursor-pointer items-center gap-2 px-3 text-[13px] font-medium transition-colors duration-200",
+                  focusRing,
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon
+                  aria-hidden="true"
+                  className={cn("h-4 w-4", active ? "text-[#C72B65]" : "text-current")}
+                />
+                {label}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "absolute inset-x-2 -bottom-px h-0.5 origin-center rounded-full bg-[#C72B65] transition-transform duration-300 ease-out motion-reduce:transition-none",
+                    active ? "scale-x-100" : "scale-x-0",
+                  )}
+                />
+              </button>
+            );
+          })}
+        </div>
+        <p className="hidden truncate text-[12px] text-muted-foreground sm:block">
+          {TEST_METHODS.find((item) => item.key === method)?.description}
+        </p>
+      </div>
+      <div className="border-t border-border">
+        <div className={cn("animate-fade-up", method !== "chat" && "hidden")}>{chat}</div>
+        <div className={cn("animate-fade-up", method !== "bot" && "hidden")}>{bot}</div>
+      </div>
+    </section>
+  );
+}
+
+type GenerationState = "idle" | "loading" | "ready";
+
+function ChatSetupBody({
+  busy,
   model,
   onModelChange,
   count,
@@ -963,7 +1151,7 @@ function EmptyStateCard({
   onGenerate,
   onManual,
 }: {
-  dimmed: boolean;
+  busy: boolean;
   model: string;
   onModelChange: (value: string) => void;
   count: number;
@@ -975,22 +1163,19 @@ function EmptyStateCard({
   return (
     <div
       className={cn(
-        "w-full max-w-[520px] overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_24px_-12px_rgba(16,24,40,0.12)] transition-opacity duration-300",
-        dimmed && "pointer-events-none opacity-50",
+        "flex min-w-0 flex-col transition-opacity duration-300",
+        busy && "pointer-events-none opacity-60",
       )}
     >
-      <div className="px-6 pb-6 pt-7 text-center">
-        <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-[#FBE7EF] text-[#C72B65] ring-4 ring-[#FBE7EF]/50">
-          <ClipboardList className="h-[18px] w-[18px]" />
-        </span>
-        <h2 className="mt-3.5 text-[15px] font-semibold text-foreground">No use cases yet</h2>
-        <p className="mx-auto mt-1 max-w-[340px] text-[12.5px] leading-5 text-muted-foreground">
-          Define how you want to test your prompt. Add cases manually or let AI generate them.
-        </p>
-
-        <div className="mt-6 grid gap-3 text-left sm:grid-cols-2">
-          <label className="block">
-            <FieldLabel>Model</FieldLabel>
+      <div className="flex-1 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-semibold text-foreground">Add use cases</h3>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Generate them from your prompt, or write your own.
+            </p>
+          </div>
+          <div className="w-[260px] max-w-full">
             <SelectField
               label="Model"
               value={model}
@@ -998,55 +1183,350 @@ function EmptyStateCard({
               options={MODELS.map((item) => ({ value: item.id, label: item.label }))}
               icon={<Asterisk className="h-3.5 w-3.5 shrink-0 text-[#D97757]" strokeWidth={2.5} />}
             />
-          </label>
-          <label className="block">
-            <FieldLabel>How many use cases?</FieldLabel>
-            <SelectField
-              label="How many use cases"
-              value={String(count)}
-              onChange={(value) => onCountChange(Number(value))}
-              options={[1, 2, 3, 4, 5].map((n) => ({
-                value: String(n),
-                label: `${n} ${n === 1 ? "case" : "cases"}`,
-              }))}
-            />
-          </label>
+          </div>
         </div>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={onGenerate}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#C72B65] text-[13px] font-medium text-white shadow-sm transition hover:bg-[#A92355] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/40"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Generate with AI
-          </button>
-          <button
-            type="button"
-            onClick={onManual}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-card text-[13px] font-medium text-foreground shadow-sm transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Manually add
-          </button>
+        <div className="mt-5">
+          <FieldLabel>Number of use cases</FieldLabel>
+          <CaseCountPicker value={count} onChange={onCountChange} />
         </div>
       </div>
-
-      <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/30 px-6 py-2.5">
-        <span className="text-[12px] text-muted-foreground">Already have cases?</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
         <button
           type="button"
           onClick={() => uploadRef.current?.click()}
-          title="Upload CSV or JSON"
-          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] font-medium text-foreground transition hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35"
+          className={cn(btn.ghost, "-ml-3")}
         >
-          <Upload className="h-3.5 w-3.5" />
+          <Upload className="h-4 w-4" />
           Upload CSV or JSON
         </button>
         <input ref={uploadRef} type="file" accept=".csv,.json" className="sr-only" />
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onManual} className={btn.secondary}>
+            <Pencil className="h-4 w-4" />
+            Write manually
+          </button>
+          <button type="button" onClick={onGenerate} className={btn.primary}>
+            <Sparkles className="h-4 w-4" />
+            Generate with AI
+          </button>
+        </div>
       </div>
     </div>
+  );
+}
+
+// Shared state tokens for illustrated choice tiles (method and case count), so both read as one family.
+const choiceActive =
+  "border-[#C72B65] bg-[#C72B65]/[0.03] [--accent:#C72B65] [--ink-soft:rgba(199,43,101,0.4)] [--ink:#C72B65] [--paper-a:#FDEFF4] [--paper-b:#FFF8FA] [--shadow:rgba(199,43,101,0.16)] [--well:rgba(199,43,101,0.06)] [--spread:1] [--sparkle:1]";
+const choiceIdle =
+  "border-border bg-card [--accent:rgba(24,24,27,0.2)] [--ink-soft:rgba(24,24,27,0.2)] [--ink:rgba(24,24,27,0.5)] [--paper-a:#F4F4F5] [--paper-b:#FAFAFA] [--shadow:rgba(24,24,27,0.06)] [--well:rgba(24,24,27,0.03)] [--spread:0.55] [--sparkle:0] hover:border-foreground/25 hover:[--spread:0.8]";
+
+const CASE_COUNTS = [
+  { value: 1, caption: "Quick check" },
+  { value: 3, caption: "Balanced" },
+  { value: 5, caption: "Broad" },
+  { value: 10, caption: "Thorough" },
+] as const;
+
+// Fan angles per option; 10 is drawn as a squared-up stack instead of a fan.
+const FANS: Record<number, number[]> = {
+  1: [-3],
+  3: [-12, 0, 12],
+  5: [-20, -10, 0, 10, 20],
+};
+
+// Back cards alternate between two soft paper tints so the stack reads as separate sheets.
+const PAPER = ["var(--paper-a)", "var(--paper-b)"];
+
+/** One sheet: solid offset print shadow, ink outline, and a mini conversation on the top sheet. */
+function Sheet({ top }: { top: boolean }) {
+  return (
+    <>
+      <rect x="44.5" y="17.5" width="36" height="48" rx="4" className="fill-[var(--shadow)]" />
+      <rect
+        x="42"
+        y="15"
+        width="36"
+        height="48"
+        rx="4"
+        strokeWidth="1.1"
+        className={cn(
+          "transition-[stroke,fill] duration-200",
+          top ? "fill-white stroke-[var(--ink)]" : "stroke-[var(--ink-soft)]",
+        )}
+      />
+      {top && (
+        <g className="transition-[fill] duration-200">
+          <rect x="47" y="21" width="16" height="6" rx="3" className="fill-foreground/12" />
+          <rect x="57" y="30.5" width="16" height="6" rx="3" className="fill-[var(--accent)]" />
+          <rect x="47" y="40" width="20" height="6" rx="3" className="fill-foreground/12" />
+          <rect x="47" y="53" width="12" height="2" rx="1" className="fill-foreground/15" />
+          <rect x="61" y="53" width="7" height="2" rx="1" className="fill-foreground/10" />
+        </g>
+      )}
+    </>
+  );
+}
+
+function CaseStackArt({ count }: { count: number }) {
+  const fan = FANS[count];
+  const layers = fan ? fan.length : 8;
+  return (
+    <svg viewBox="0 0 120 80" className="h-[80px] w-[120px] overflow-visible" aria-hidden="true">
+      <ellipse
+        cx="60"
+        cy="72"
+        rx={fan ? 14 + layers * 5 : 30}
+        ry="2.6"
+        className="fill-foreground/[0.06]"
+      />
+      {Array.from({ length: layers }, (_, i) => {
+        const top = i === layers - 1;
+        const style: React.CSSProperties = fan
+          ? {
+              transform: `rotate(calc(${fan[i]}deg * var(--spread)))`,
+              transformOrigin: "60px 70px",
+            }
+          : {
+              transform: `translate(calc(${(i - 4) * 2.2}px * var(--spread)), calc(${-(i - 4) * 2.4}px * var(--spread)))`,
+            };
+        return (
+          <g
+            key={i}
+            style={{ ...style, fill: top ? undefined : PAPER[i % 2] }}
+            className="transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+          >
+            <Sheet top={top} />
+          </g>
+        );
+      })}
+      {/* Editorial sparkle, only on the selected option. */}
+      <path
+        d="M95 12l1.6 4.2 4.2 1.6-4.2 1.6L95 23.6l-1.6-4.2-4.2-1.6 4.2-1.6z"
+        className="fill-[var(--accent)] opacity-[var(--sparkle)] transition-opacity duration-200"
+      />
+    </svg>
+  );
+}
+
+// Editorial-style picker: each option is a small illustration of the stack it will produce.
+function CaseCountPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Number of use cases"
+      className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+    >
+      {CASE_COUNTS.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "group flex cursor-pointer flex-col items-center rounded-lg border px-3 pb-3 pt-4 transition-colors duration-200",
+              focusRing,
+              active ? choiceActive : choiceIdle,
+            )}
+          >
+            <CaseStackArt count={option.value} />
+            <span className="mt-3 text-[13px] font-semibold tabular-nums text-foreground">
+              {option.value} {option.value === 1 ? "case" : "cases"}
+            </span>
+            <span className="text-[12px] text-muted-foreground">{option.caption}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Right-hand column of the Chat setup: wireframes at rest, shimmer while generating, real cases when ready.
+function GeneratedPreview({
+  state,
+  count,
+  progress,
+  stageTitle,
+  stageDetail,
+  cases,
+  addedIds,
+  onAdd,
+  onAddAll,
+  onRegenerate,
+}: {
+  state: GenerationState;
+  count: number;
+  progress: number;
+  stageTitle: string;
+  stageDetail: string;
+  cases: UseCase[];
+  addedIds: Set<string>;
+  onAdd: (item: UseCase) => void;
+  onAddAll: () => void;
+  onRegenerate: () => void;
+}) {
+  const addedCount = cases.filter((item) => addedIds.has(item.id)).length;
+  return (
+    <section
+      aria-label="Generated use cases"
+      aria-busy={state === "loading"}
+      className="flex h-full min-h-0 flex-col"
+    >
+      <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
+        <h2 className="text-[14px] font-semibold text-foreground">Generate use cases</h2>
+      </div>
+      <div className="flex min-h-[52px] shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-3">
+        {state === "loading" ? (
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-[13px] font-medium text-foreground">{stageTitle}</p>
+              <span className="text-[12px] font-medium tabular-nums text-[#C72B65]">
+                {progress}%
+              </span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
+              <div
+                className="h-full rounded-full bg-[#C72B65] transition-[width] duration-500 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-1 truncate text-[12px] text-muted-foreground">{stageDetail}</p>
+          </div>
+        ) : state === "ready" ? (
+          <>
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+              {cases.length} use {cases.length === 1 ? "case" : "cases"} ready
+            </p>
+            <button
+              type="button"
+              onClick={onRegenerate}
+              className={cn(btn.ghost, "-mr-2 h-8 px-2")}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Regenerate
+            </button>
+          </>
+        ) : (
+          <p className={eyebrow}>Preview</p>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto bg-muted/30 p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {state === "ready"
+          ? cases.map((item, i) => (
+              <CompactCaseCard
+                key={item.id}
+                item={item}
+                added={addedIds.has(item.id)}
+                onAdd={() => onAdd(item)}
+                delay={i * 80}
+              />
+            ))
+          : Array.from({ length: count }, (_, i) => (
+              <WireframeCard key={i} loading={state === "loading"} delay={i * 140} />
+            ))}
+        {state === "idle" && (
+          <p className="pt-1 text-center text-[12px] text-muted-foreground">
+            Pick a model and count, then generate. Use cases appear here.
+          </p>
+        )}
+      </div>
+
+      {state === "ready" && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-5 py-3">
+          <span className="text-[12px] text-muted-foreground">
+            {addedCount} of {cases.length} added
+          </span>
+          <button type="button" onClick={onAddAll} className={btn.primary}>
+            <Plus className="h-4 w-4" />
+            Add all
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WireframeCard({ loading, delay }: { loading: boolean; delay: number }) {
+  const bar = cn("rounded-full bg-border/80", loading && "animate-pulse");
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "space-y-2.5 rounded-lg border bg-card p-3.5 transition-colors duration-300",
+        loading ? "border-border" : "border-dashed border-border",
+      )}
+    >
+      <div className={cn(bar, "h-2.5 w-2/3")} style={{ animationDelay: `${delay}ms` }} />
+      <div className={cn(bar, "h-2 w-full")} style={{ animationDelay: `${delay + 60}ms` }} />
+      <div className={cn(bar, "h-2 w-4/5")} style={{ animationDelay: `${delay + 120}ms` }} />
+      <div className="flex gap-1.5 pt-0.5">
+        <div className={cn(bar, "h-4 w-14")} style={{ animationDelay: `${delay + 180}ms` }} />
+        <div className={cn(bar, "h-4 w-10")} style={{ animationDelay: `${delay + 240}ms` }} />
+      </div>
+    </div>
+  );
+}
+
+function CompactCaseCard({
+  item,
+  added,
+  onAdd,
+  delay,
+}: {
+  item: UseCase;
+  added: boolean;
+  onAdd: () => void;
+  delay: number;
+}) {
+  return (
+    <article
+      className="rounded-lg border border-border bg-card p-3.5 animate-fade-up"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <h4 className="text-[13px] font-semibold leading-snug text-foreground">{item.title}</h4>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={added}
+          aria-label={added ? `${item.title} added` : `Add ${item.title}`}
+          className={cn(
+            "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border px-2 text-[12px] font-medium transition-colors disabled:cursor-default",
+            focusRing,
+            added
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-border bg-card text-foreground hover:border-[#C72B65]/50 hover:text-[#C72B65]",
+          )}
+        >
+          {added ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+          {added ? "Added" : "Add"}
+        </button>
+      </div>
+      <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+        {item.description}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {item.tags.map((tag) => (
+          <span
+            key={tag}
+            className="rounded-full border border-border px-2 py-px text-[11px] text-muted-foreground"
+          >
+            {tag}
+          </span>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -1064,7 +1544,7 @@ function ProgressToast({
   return (
     <div
       role="status"
-      className="pointer-events-auto flex w-full max-w-[440px] items-center gap-4 overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card via-card to-[#FBE7EF] px-5 py-4 shadow-lg shadow-black/5 animate-fade-up"
+      className="pointer-events-auto flex w-full max-w-[440px] items-center gap-4 overflow-hidden rounded-xl border border-border bg-gradient-to-br from-card via-card to-[#FBE7EF] px-5 py-4 shadow-lg shadow-black/5 animate-fade-up"
     >
       <span className="relative flex h-20 w-20 shrink-0 items-center justify-center">
         <svg viewBox="0 0 80 80" className="absolute inset-0 -rotate-90" aria-hidden="true">
@@ -1082,10 +1562,10 @@ function ProgressToast({
             className="transition-[stroke-dashoffset] duration-200 ease-out"
           />
         </svg>
-        <span className="text-[15px] font-semibold tabular-nums text-[#C72B65]">{progress}%</span>
+        <span className="text-[16px] font-semibold tabular-nums text-[#C72B65]">{progress}%</span>
       </span>
       <div className="min-w-0">
-        <p className="text-[15px] font-semibold text-[#C72B65]">{title}</p>
+        <p className="text-[16px] font-semibold text-[#C72B65]">{title}</p>
         <p className="mt-1 truncate text-[13px] text-muted-foreground">{detail}</p>
       </div>
     </div>
@@ -1115,7 +1595,7 @@ function GeneratePanel({
   return (
     <>
       <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-[14.5px] font-semibold text-foreground">Generate use cases</h2>
+        <h2 className="text-[14px] font-semibold text-foreground">Generate use cases</h2>
         <button
           type="button"
           onClick={onClose}
@@ -1128,7 +1608,7 @@ function GeneratePanel({
 
       <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">
         {loading ? (
-          <span className="flex items-center gap-2.5 text-[11.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <span className="flex items-center gap-2.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
             <span className="flex items-center gap-1">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C72B65]" />
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C72B65]/70 [animation-delay:150ms]" />
@@ -1138,14 +1618,14 @@ function GeneratePanel({
           </span>
         ) : (
           <>
-            <span className="flex items-center gap-2 text-[13.5px] font-semibold text-foreground">
+            <span className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               {cases.length} use {cases.length === 1 ? "case" : "cases"} ready
             </span>
             <button
               type="button"
               onClick={onRegenerate}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground transition hover:text-foreground"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition hover:text-foreground"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Regenerate
@@ -1229,7 +1709,7 @@ function UseCaseCard({
           onClick={onAdd}
           disabled={added}
           className={cn(
-            "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-[12.5px] font-medium transition",
+            "inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-[13px] font-medium transition",
             added
               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
               : "border-[#C72B65]/50 text-[#C72B65] hover:border-[#C72B65] hover:bg-[#FBE7EF]",
@@ -1239,10 +1719,10 @@ function UseCaseCard({
           {added ? "Added" : "Add"}
         </button>
       </div>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{item.description}</p>
+      <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{item.description}</p>
       <div className="mt-3 flex gap-2.5 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
         <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C72B65]" />
-        <p className="text-[12.5px] leading-relaxed text-foreground">&ldquo;{item.opener}&rdquo;</p>
+        <p className="text-[13px] leading-relaxed text-foreground">&ldquo;{item.opener}&rdquo;</p>
       </div>
       <ul className="mt-2.5 space-y-1.5">
         {item.followUps.map((line) => (
@@ -1285,7 +1765,8 @@ function CaseIconButton({
       title={label}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-7 w-7 items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/35",
+        "inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border transition-colors",
+        focusRing,
         active
           ? "border-[#C72B65]/40 bg-[#FBE7EF] text-[#C72B65]"
           : "border-[#C72B65]/30 bg-card text-[#C72B65] hover:border-[#C72B65]/60 hover:bg-[#FBE7EF]",
@@ -1300,21 +1781,18 @@ function CaseCardBody({ item }: { item: UseCase }) {
   return (
     <>
       {item.description && (
-        <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+        <p className="mt-2.5 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
           {item.description}
         </p>
       )}
-      <div className="mt-3 flex gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
-        <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-[#C72B65]" />
+      <div className="mt-2.5 flex gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C72B65]" />
         <p className="text-[13px] leading-relaxed text-foreground">&ldquo;{item.opener}&rdquo;</p>
       </div>
       {item.followUps.length > 0 && (
-        <ul className="mt-3 space-y-1.5">
+        <ul className="mt-2.5 space-y-1">
           {item.followUps.map((line) => (
-            <li
-              key={line}
-              className="flex gap-2 text-[12.5px] leading-relaxed text-muted-foreground"
-            >
+            <li key={line} className="flex gap-2 text-[12px] leading-relaxed text-muted-foreground">
               <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               {line}
             </li>
@@ -1327,11 +1805,11 @@ function CaseCardBody({ item }: { item: UseCase }) {
 
 function CaseTags({ tags }: { tags: string[] }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
       {tags.map((tag) => (
         <span
           key={tag}
-          className="rounded-full border border-border bg-card px-2.5 py-0.5 text-[11.5px] text-muted-foreground"
+          className="rounded-full border border-border bg-card px-2 py-px text-[11px] text-muted-foreground"
         >
           {tag}
         </span>
@@ -1368,7 +1846,7 @@ function SavedDatesCalendar({
         }}
       />
       <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2">
-        <span className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-[#C72B65]" />
           Has saved use cases
         </span>
@@ -1433,7 +1911,7 @@ function AddedCasesList({
     "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-foreground transition hover:bg-muted";
 
   return (
-    <div className={cn("flex flex-1 flex-col p-6 transition-opacity", busy && "opacity-60")}>
+    <ViewShell className={cn("transition-opacity", busy && "opacity-60")}>
       {menu && (
         <button
           type="button"
@@ -1442,28 +1920,34 @@ function AddedCasesList({
           onClick={() => setMenu(null)}
         />
       )}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         {showSaved ? (
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setView("cases")}
               aria-label="Back to use cases"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-foreground transition hover:bg-muted"
+              className={cn(btn.ghost, "-ml-2 w-9 px-0")}
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
-            <h2 className="text-[15px] font-semibold text-foreground">
-              Saved use cases ({visibleSaved.length})
+            <h2 className="text-[16px] font-semibold text-foreground">
+              Saved use cases
+              <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
+                {visibleSaved.length}
+              </span>
             </h2>
           </div>
         ) : (
           <div className="flex items-center gap-2.5">
-            <h2 className="text-[15px] font-semibold text-foreground">
-              Use cases ({cases.length})
+            <h2 className="text-[16px] font-semibold text-foreground">
+              Use cases
+              <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
+                {cases.length}
+              </span>
             </h2>
             {recent && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C72B65]/25 bg-[#FBE7EF] px-2.5 py-1 text-[11.5px] font-medium text-[#C72B65] animate-fade-up">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C72B65]/25 bg-[#FBE7EF] px-2.5 py-1 text-[12px] font-medium text-[#C72B65] animate-fade-up">
                 <History className="h-3 w-3" />
                 Recent use cases
               </span>
@@ -1477,7 +1961,7 @@ function AddedCasesList({
                 type="button"
                 aria-label="Filter saved use cases by date"
                 className={cn(
-                  "inline-flex h-9 items-center gap-1.5 rounded-full border pl-2.5 text-[12.5px] font-medium transition",
+                  "inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border pl-3 text-[13px] font-medium transition-colors",
                   pickedDate ? "pr-1" : "pr-3",
                   pickedDate
                     ? "border-[#C72B65]/40 bg-[#FBE7EF] text-[#C72B65]"
@@ -1539,15 +2023,11 @@ function AddedCasesList({
               type="button"
               onClick={() => setView(showSaved ? "cases" : "saved")}
               aria-pressed={showSaved}
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium transition",
-                showSaved
-                  ? "border-[#C72B65]/40 bg-[#FBE7EF] text-[#C72B65]"
-                  : "border-border bg-card text-foreground hover:bg-muted",
-              )}
+              className={btn.secondary}
             >
-              <Bookmark className={cn("h-3.5 w-3.5", showSaved && "fill-current")} />
-              Saved use cases ({saved.length})
+              <Bookmark className="h-4 w-4" />
+              Saved
+              <span className="tabular-nums text-muted-foreground">{saved.length}</span>
             </button>
             <div className="relative">
               <button
@@ -1555,7 +2035,7 @@ function AddedCasesList({
                 onClick={() => setMenu(menu === "add" ? null : "add")}
                 disabled={busy}
                 aria-expanded={menu === "add"}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#C72B65] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#A92355] disabled:opacity-60"
+                className={btn.primary}
               >
                 <Plus className="h-4 w-4" />
                 Add more
@@ -1595,7 +2075,7 @@ function AddedCasesList({
                 onClick={() => setMenu(menu === "more" ? null : "more")}
                 aria-label="More actions"
                 aria-expanded={menu === "more"}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-muted"
+                className={btn.icon}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
@@ -1619,7 +2099,7 @@ function AddedCasesList({
         )}
       </div>
 
-      <div className="flex-1 rounded-2xl border border-border bg-muted/30 p-5">
+      <div className="flex-1">
         {showSaved ? (
           groups.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
@@ -1628,10 +2108,10 @@ function AddedCasesList({
               ) : (
                 <Bookmark className="h-5 w-5 text-muted-foreground" />
               )}
-              <p className="text-[13.5px] font-semibold text-foreground">
+              <p className="text-[14px] font-semibold text-foreground">
                 {pickedDate ? "Nothing saved on this day" : "No saved use cases yet"}
               </p>
-              <p className="max-w-xs text-[12.5px] text-muted-foreground">
+              <p className="max-w-xs text-[13px] text-muted-foreground">
                 {pickedDate
                   ? "Pick a date with a dot in the calendar, or view all dates."
                   : "Save a use case from your test list to reuse it in future runs."}
@@ -1640,7 +2120,7 @@ function AddedCasesList({
                 <button
                   type="button"
                   onClick={() => setPickedDate(undefined)}
-                  className="mt-1 text-[12.5px] font-medium text-[#C72B65] hover:underline"
+                  className="mt-1 text-[13px] font-medium text-[#C72B65] hover:underline"
                 >
                   Show all dates
                 </button>
@@ -1686,14 +2166,11 @@ function AddedCasesList({
                     </span>
                     <span className="h-px flex-1 bg-border" aria-hidden="true" />
                   </div>
-                  <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <div className="grid items-start gap-3 xl:grid-cols-2">
                     {group.entries.map(({ item, savedAt, result }) => {
                       const inRun = addedIds.has(item.id);
                       return (
-                        <article
-                          key={item.id}
-                          className="rounded-2xl border border-border bg-card p-5 shadow-sm"
-                        >
+                        <article key={item.id} className={cn(panel, "p-4")}>
                           <div className="flex items-start gap-3">
                             <div className="min-w-0 flex-1">
                               <h4 className="text-[14px] font-semibold leading-snug text-foreground">
@@ -1731,7 +2208,7 @@ function AddedCasesList({
                           </div>
                           <CaseCardBody item={item} />
                           <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-2.5">
-                            <p className="text-[11.5px] text-muted-foreground">
+                            <p className="text-[12px] text-muted-foreground">
                               Saved at{" "}
                               {new Date(savedAt).toLocaleTimeString([], {
                                 hour: "numeric",
@@ -1739,7 +2216,7 @@ function AddedCasesList({
                               })}
                             </p>
                             {result !== undefined && (
-                              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11.5px] text-emerald-700">
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[12px] text-emerald-700">
                                 <CheckCircle2 className="h-3 w-3" />
                                 Results
                                 <span className="font-semibold tabular-nums">{result}%</span>
@@ -1755,15 +2232,12 @@ function AddedCasesList({
             </div>
           )
         ) : (
-          <div className="grid items-start gap-4 xl:grid-cols-2">
+          <div className="grid items-start gap-3 xl:grid-cols-2">
             {cases.map((item, i) => {
               return (
-                <article
-                  key={item.id}
-                  className="rounded-2xl border border-border bg-card p-5 shadow-sm animate-fade-up"
-                >
+                <article key={item.id} className={cn(panel, "p-4 animate-fade-up")}>
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#FBE7EF] text-[11.5px] font-semibold text-[#C72B65]">
+                    <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FBE7EF] text-[11px] font-semibold text-[#C72B65]">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1772,7 +2246,7 @@ function AddedCasesList({
                       </h3>
                       <CaseTags tags={item.tags} />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1">
                       <CaseIconButton label="Edit use case" onClick={() => onEdit(item)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </CaseIconButton>
@@ -1788,7 +2262,7 @@ function AddedCasesList({
           </div>
         )}
       </div>
-    </div>
+    </ViewShell>
   );
 }
 
@@ -1810,7 +2284,7 @@ function ManualCasePanel({
   return (
     <>
       <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-[14.5px] font-semibold text-foreground">
+        <h2 className="text-[14px] font-semibold text-foreground">
           {initial ? "Edit use case" : "Add a use case"}
         </h2>
         <button

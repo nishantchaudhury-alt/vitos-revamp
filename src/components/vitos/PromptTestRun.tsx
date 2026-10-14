@@ -13,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ViewHeader, ViewShell } from "./PlaygroundLayout";
+import { btn, panel } from "./playgroundStyles";
 
 export type RunCase = {
   id: string;
@@ -423,14 +425,13 @@ export function RunHistoryButton({
       aria-expanded={open}
       title="Run history"
       className={cn(
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C72B65]/30",
-        open
-          ? "border-[#C72B65]/40 bg-[#FBE7EF] text-[#C72B65]"
-          : "border-border bg-card text-foreground hover:bg-muted",
+        btn.icon,
+        "relative",
+        open && "border-[#C72B65]/40 bg-[#C72B65]/[0.04] text-[#C72B65] hover:bg-[#C72B65]/[0.06]",
       )}
     >
       <History className="h-3.5 w-3.5" />
-      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C72B65] px-1 text-[9.5px] font-semibold tabular-nums text-white ring-2 ring-card">
+      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C72B65] px-1 text-[11px] font-semibold tabular-nums text-white ring-2 ring-card">
         {count}
       </span>
     </button>
@@ -461,7 +462,7 @@ export function RunHistoryPanel({
     >
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <History className="h-3.5 w-3.5 text-muted-foreground" />
-        <h3 className="text-[13.5px] font-semibold text-foreground">Run history</h3>
+        <h3 className="text-[14px] font-semibold text-foreground">Run history</h3>
         <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
           {options.length}
         </span>
@@ -503,25 +504,23 @@ export function RunHistoryPanel({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="flex items-center gap-2 text-[13.5px] font-semibold text-foreground">
+                  <p className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
                     {option.title}
                     {i === 0 && (
-                      <span className="rounded-full border border-border bg-card px-1.5 text-[10.5px] font-medium text-muted-foreground">
+                      <span className="rounded-full border border-border bg-card px-1.5 text-[11px] font-medium text-muted-foreground">
                         Latest
                       </span>
                     )}
                     {active && (
-                      <span className="rounded-full bg-[#C72B65] px-1.5 text-[10.5px] font-medium text-white">
+                      <span className="rounded-full bg-[#C72B65] px-1.5 text-[11px] font-medium text-white">
                         Viewing
                       </span>
                     )}
                   </p>
-                  <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-                    {option.meta}
-                  </p>
+                  <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{option.meta}</p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className={cn("text-[20px] font-semibold leading-none tabular-nums", t.text)}>
+                  <p className={cn("text-[16px] font-semibold leading-none tabular-nums", t.text)}>
                     {option.score}
                     <span className="ml-0.5 text-[11px] font-medium text-muted-foreground">
                       /100
@@ -554,7 +553,7 @@ export function RunHistoryPanel({
                   />
                 ))}
               </div>
-              <div className="mt-2 flex items-center justify-between text-[11.5px] text-muted-foreground">
+              <div className="mt-2 flex items-center justify-between text-[12px] text-muted-foreground">
                 <span>
                   <span className="font-medium text-foreground">
                     {casesPassed}/{option.cases.length}
@@ -729,27 +728,29 @@ export function TestRunView({
   cases,
   statuses,
   transcripts,
-  typingId,
+  typingIds,
   progress,
   headerRight,
+  meta,
   focusId = null,
 }: {
   headerRight?: React.ReactNode;
+  meta?: React.ReactNode;
   focusId?: string | null;
   cases: RunCase[];
   statuses: Record<string, RunStatus>;
   transcripts: Record<string, RunMessage[]>;
-  typingId: string | null;
+  typingIds: Set<string>;
   progress: number;
 }) {
-  const runningId = cases.find((item) => statuses[item.id] === "running")?.id ?? null;
-  const [selectedId, setSelectedId] = useState(() => focusId ?? runningId ?? cases[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(() => focusId ?? cases[0]?.id ?? "");
 
-  // Follow the live case as the run moves on, and honour jumps from the results page.
-  const [followed, setFollowed] = useState(runningId);
-  if (runningId !== followed) {
-    setFollowed(runningId);
-    if (runningId) setSelectedId(runningId);
+  // All cases run together: open the first one when the run starts, then leave the choice to the user.
+  const anyRunning = cases.some((item) => statuses[item.id] === "running");
+  const [wasRunning, setWasRunning] = useState(anyRunning);
+  if (anyRunning !== wasRunning) {
+    setWasRunning(anyRunning);
+    if (anyRunning) setSelectedId(cases[0]?.id ?? "");
   }
   const [lastFocus, setLastFocus] = useState(focusId);
   if (focusId !== lastFocus) {
@@ -761,14 +762,13 @@ export function TestRunView({
   const liveSelected = !!selected && statuses[selected.id] === "running";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-6">
-      <h2 className="sr-only">Test run, {cases.length} use cases</h2>
-      <div className="mb-4 flex items-center justify-end gap-2">{headerRight}</div>
+    <ViewShell fill>
+      <ViewHeader title="Test run" count={cases.length} meta={meta} actions={headerRight} />
 
       <style>{RAIL_STYLES}</style>
       <div
         className={cn(
-          "rail-frame grid min-h-[520px] flex-1 basis-0 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100 p-3 shadow-sm md:grid-cols-[minmax(232px,288px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:pl-0",
+          "rail-frame grid min-h-[520px] flex-1 basis-0 overflow-hidden rounded-xl border border-border bg-neutral-100 p-3 md:grid-cols-[minmax(232px,280px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:pl-0",
           liveSelected && "rail-live",
         )}
       >
@@ -781,9 +781,9 @@ export function TestRunView({
           )}
         >
           <div className="flex items-center justify-between gap-3 pb-4 pl-2.5 pr-3 pt-1.5">
-            <p className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               Use cases
-              <span className="rounded-full bg-card px-1.5 text-[10px] tabular-nums ring-1 ring-border">
+              <span className="rounded-full bg-card px-1.5 text-[11px] tabular-nums ring-1 ring-border">
                 {cases.length}
               </span>
             </p>
@@ -833,21 +833,21 @@ export function TestRunView({
                     <span
                       title={item.title}
                       className={cn(
-                        "truncate text-[12.5px] leading-5",
+                        "truncate text-[13px] leading-5",
                         active ? "font-semibold text-foreground" : "font-medium text-foreground/90",
                       )}
                     >
                       {item.title}
                     </span>
                     {status === "running" ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-50 px-1.5 text-[10.5px] font-semibold leading-[18px] text-blue-600">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-50 px-1.5 text-[11px] font-semibold leading-[18px] text-blue-600">
                         <span className="h-1 w-1 animate-pulse rounded-full bg-blue-500" />
                         Live
                       </span>
                     ) : score !== null ? (
                       <span
                         className={cn(
-                          "shrink-0 rounded-md px-1.5 text-[10.5px] font-semibold leading-[18px] tabular-nums",
+                          "shrink-0 rounded-md px-1.5 text-[11px] font-semibold leading-[18px] tabular-nums",
                           tone(score).tile,
                           tone(score).text,
                         )}
@@ -855,11 +855,11 @@ export function TestRunView({
                         {score}
                       </span>
                     ) : (
-                      <span className="shrink-0 text-[10.5px] text-muted-foreground">Queued</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">Queued</span>
                     )}
                   </span>
-                  <span className="block truncate text-[11.5px] leading-[18px] text-muted-foreground">
-                    {typingId === item.id
+                  <span className="block truncate text-[12px] leading-[18px] text-muted-foreground">
+                    {typingIds.has(item.id)
                       ? "Agent is typing…"
                       : last
                         ? `${last.role === "bot" ? "Agent: " : ""}${last.text}`
@@ -868,7 +868,7 @@ export function TestRunView({
                           : "Starting conversation…"}
                   </span>
                   {item.tags.length > 0 && (
-                    <span className="mt-1.5 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                    <span className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                       <span
                         className={cn("rounded px-1.5 py-px font-medium", tagTone(item.tags[0]))}
                       >
@@ -889,11 +889,11 @@ export function TestRunView({
             item={selected}
             status={statuses[selected.id] ?? "queued"}
             messages={transcripts[selected.id] ?? []}
-            typing={typingId === selected.id}
+            typing={typingIds.has(selected.id)}
           />
         )}
       </div>
-    </div>
+    </ViewShell>
   );
 }
 
@@ -923,12 +923,12 @@ function ConversationPane({
   }, [messages.length, typing]);
 
   return (
-    <section className="rail-pane flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--rail-line)] bg-card animate-fade-up">
+    <section className="rail-pane flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--rail-line)] bg-card animate-fade-up">
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <CaseAvatar status={status} size="lg" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[14px] font-semibold text-foreground">{item.title}</h3>
-          <p className={cn("flex items-center gap-1.5 text-[11.5px] font-medium", line.text)}>
+          <p className={cn("flex items-center gap-1.5 text-[12px] font-medium", line.text)}>
             <span className={cn("h-1.5 w-1.5 rounded-full", line.dot)} />
             {line.label}
             {score !== null && (
@@ -954,10 +954,10 @@ function ConversationPane({
       >
         {messages.length === 0 && !typing ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
               <Clock className="h-4 w-4" />
             </span>
-            <p className="text-[12.5px] text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               {status === "running"
                 ? "Starting conversation…"
                 : "This use case starts when the earlier ones finish."}
@@ -968,18 +968,16 @@ function ConversationPane({
             {messages.map((message, i) =>
               message.role === "user" ? (
                 <div key={i} className="flex flex-col items-start gap-1 animate-fade-up">
-                  <p className="max-w-[70%] rounded-2xl rounded-tl-md bg-muted/70 px-3.5 py-2 text-[12.5px] leading-relaxed text-foreground">
+                  <p className="max-w-[70%] rounded-xl rounded-tl-md bg-muted/70 px-3.5 py-2 text-[13px] leading-relaxed text-foreground">
                     {message.text}
                   </p>
-                  <span className="pl-1 text-[10.5px] text-muted-foreground">
-                    Simulated customer
-                  </span>
+                  <span className="pl-1 text-[11px] text-muted-foreground">Simulated customer</span>
                 </div>
               ) : (
                 <div key={i} className="flex flex-col items-end gap-1 animate-fade-up">
                   <p
                     className={cn(
-                      "max-w-[70%] rounded-2xl rounded-tr-md border px-3.5 py-2 text-[12.5px] leading-relaxed text-foreground",
+                      "max-w-[70%] rounded-xl rounded-tr-md border px-3.5 py-2 text-[13px] leading-relaxed text-foreground",
                       message.rating
                         ? RATING_META[message.rating].bubble
                         : "border-[#C72B65]/15 bg-[#FBE7EF]/60",
@@ -997,7 +995,7 @@ function ConversationPane({
             )}
             {typing && (
               <div className="flex justify-end">
-                <span className="inline-flex items-center gap-1 rounded-2xl rounded-tr-md border border-[#C72B65]/15 bg-[#FBE7EF]/60 px-4 py-3">
+                <span className="inline-flex items-center gap-1 rounded-xl rounded-tr-md border border-[#C72B65]/15 bg-[#FBE7EF]/60 px-4 py-3">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C72B65]/70" />
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C72B65]/70 [animation-delay:150ms]" />
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#C72B65]/70 [animation-delay:300ms]" />
@@ -1106,14 +1104,14 @@ function ResultsSection({
   return (
     <section
       aria-labelledby={`results-step-${step}`}
-      className={cn("flex min-w-0 flex-col rounded-2xl bg-muted/50 p-2", className)}
+      className={cn("flex min-w-0 flex-col gap-3", className)}
     >
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2 px-2 pb-2 pt-0.5">
-        <div className="flex items-baseline gap-2">
-          <span className="flex h-[18px] w-[18px] shrink-0 translate-y-[3px] items-center justify-center rounded-full bg-foreground text-[10.5px] font-semibold text-background">
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-foreground text-[11px] font-semibold tabular-nums text-background">
             {step}
           </span>
-          <h3 id={`results-step-${step}`} className="text-[13.5px] font-semibold text-foreground">
+          <h3 id={`results-step-${step}`} className="text-[14px] font-semibold text-foreground">
             {title}
           </h3>
           {note && <span className="text-[12px] text-muted-foreground">{note}</span>}
@@ -1182,11 +1180,11 @@ function MetricCard({
 }) {
   const v = CARD_VARIANTS[variant];
   return (
-    <div className={cn("flex flex-col rounded-xl border px-4 py-3.5", v.card)}>
+    <div className={cn("flex flex-col rounded-lg border px-4 py-3.5", v.card)}>
       <div className="flex h-9 items-center justify-between gap-2">
         <span
           className={cn(
-            "text-[26px] font-semibold leading-none tabular-nums",
+            "text-[24px] font-semibold leading-none tabular-nums",
             v.value,
             valueClassName,
           )}
@@ -1446,12 +1444,12 @@ export function TestResultsView({
   const chosen = fixList.filter((entry) => !excluded.has(entry.fix.id)).length;
 
   return (
-    <div className="space-y-4 p-6 animate-fade-up">
+    <ViewShell className="animate-fade-up">
       {header}
 
       <ResultsSection step={1} title="How did this run do?">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
+        <div className={cn(panel, "p-5")}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
             <MetricCard
               value={overall}
               suffix="/100"
@@ -1520,8 +1518,8 @@ export function TestResultsView({
               const t = tone(metric.value);
               return (
                 <div key={metric.key}>
-                  <p className="text-[12.5px] text-muted-foreground">{metric.label}</p>
-                  <p className={cn("mt-0.5 text-[17px] font-semibold tabular-nums", t.text)}>
+                  <p className="text-[13px] text-muted-foreground">{metric.label}</p>
+                  <p className={cn("mt-0.5 text-[16px] font-semibold tabular-nums", t.text)}>
                     {metric.value}
                   </p>
                   <div className="relative mt-1.5 h-1 rounded-full bg-muted">
@@ -1547,8 +1545,8 @@ export function TestResultsView({
 
       <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
         <ResultsSection step={2} title="Which use cases are below target?">
-          <div className="flex flex-1 flex-col rounded-xl border border-border bg-card p-3 shadow-sm">
-            <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(80px,1fr)_36px_26px] items-end gap-3 px-2 pb-2 text-[10.5px] font-medium text-muted-foreground">
+          <div className={cn(panel, "flex flex-1 flex-col p-3")}>
+            <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(80px,1fr)_36px_26px] items-end gap-3 px-2 pb-2 text-[11px] font-medium text-muted-foreground">
               <span>Use case</span>
               <span className="grid grid-cols-2">
                 <span className="pr-1.5 text-right">below</span>
@@ -1580,7 +1578,7 @@ export function TestResultsView({
                     <span
                       title={row.item.title}
                       className={cn(
-                        "truncate text-[12.5px]",
+                        "truncate text-[13px]",
                         active ? "font-semibold text-foreground" : "text-foreground/85",
                       )}
                     >
@@ -1627,10 +1625,10 @@ export function TestResultsView({
 
         <ResultsSection step={3} title="Why did it score this way?">
           {selected && (
-            <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              <div className="flex items-start justify-between gap-4 border-b border-border/70 px-4 py-3">
+            <div className={cn(panel, "flex flex-1 flex-col overflow-hidden")}>
+              <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div className="min-w-0">
-                  <h4 className="truncate text-[15px] font-semibold text-foreground">
+                  <h4 className="truncate text-[16px] font-semibold text-foreground">
                     {selected.item.title}
                   </h4>
                   <div className="mt-1.5 flex items-center gap-2">
@@ -1645,7 +1643,7 @@ export function TestResultsView({
                         />
                       ))}
                     </span>
-                    <span className="text-[11.5px] text-muted-foreground">
+                    <span className="text-[12px] text-muted-foreground">
                       {selected.scenariosPassed} of {selected.outcome.scenarios.length} scenarios
                       passed
                     </span>
@@ -1655,7 +1653,7 @@ export function TestResultsView({
                   <div className="text-right">
                     <p
                       className={cn(
-                        "text-[26px] font-semibold leading-none tabular-nums",
+                        "text-[24px] font-semibold leading-none tabular-nums",
                         tone(selected.score).text,
                       )}
                     >
@@ -1670,7 +1668,7 @@ export function TestResultsView({
                       type="button"
                       onClick={() => step(-1)}
                       aria-label="Previous use case"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-foreground transition hover:bg-muted"
+                      className={cn(btn.icon, "h-8 w-8")}
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
@@ -1678,7 +1676,7 @@ export function TestResultsView({
                       type="button"
                       onClick={() => step(1)}
                       aria-label="Next use case"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-foreground transition hover:bg-muted"
+                      className={cn(btn.icon, "h-8 w-8")}
                     >
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
@@ -1686,10 +1684,10 @@ export function TestResultsView({
                 </div>
               </div>
 
-              <div className="grid items-center gap-4 px-4 py-3 sm:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="grid items-center gap-4 px-5 py-4 sm:grid-cols-[220px_minmax(0,1fr)]">
                 <ScoreRadar scores={selected.outcome.scores} />
                 <div>
-                  <p className="mb-1.5 text-[11.5px] text-muted-foreground">Distance from target</p>
+                  <p className="mb-1.5 text-[12px] text-muted-foreground">Distance from target</p>
                   <div className="space-y-1">
                     {RADAR_ORDER.map((key) => {
                       const value = selected.outcome.scores[key];
@@ -1724,7 +1722,7 @@ export function TestResultsView({
                           >
                             {signed(gap)}
                           </span>
-                          <span className="text-right text-[11.5px] tabular-nums text-muted-foreground">
+                          <span className="text-right text-[12px] tabular-nums text-muted-foreground">
                             {value}
                           </span>
                         </div>
@@ -1734,22 +1732,22 @@ export function TestResultsView({
                 </div>
               </div>
 
-              <div className="mt-auto grid border-t border-border/70 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-                <div className="px-4 py-3">
-                  <h5 className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-red-600">
+              <div className="mt-auto grid border-t border-border sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                <div className="px-5 py-4">
+                  <h5 className="text-[11px] font-bold uppercase tracking-[0.08em] text-red-600">
                     Issues · {selected.outcome.issues.length}
                   </h5>
                   {selected.outcome.issues.length ? (
                     <ul className="mt-2 space-y-1.5">
                       {selected.outcome.issues.map((issue) => (
-                        <li key={issue} className="flex gap-2 text-[12.5px] text-foreground/85">
+                        <li key={issue} className="flex gap-2 text-[13px] text-foreground/85">
                           <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
                           {issue}
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-2 text-[12.5px] text-muted-foreground">No issues found.</p>
+                    <p className="mt-2 text-[13px] text-muted-foreground">No issues found.</p>
                   )}
                   {onViewConversation && (
                     <button
@@ -1762,13 +1760,13 @@ export function TestResultsView({
                     </button>
                   )}
                 </div>
-                <div className="border-t border-border/70 px-4 py-3 sm:border-l sm:border-t-0">
-                  <h5 className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-emerald-700">
+                <div className="border-t border-border px-5 py-4 sm:border-l sm:border-t-0">
+                  <h5 className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">
                     Strengths · {selected.outcome.strengths.length}
                   </h5>
                   <ul className="mt-2 space-y-1.5">
                     {selected.outcome.strengths.map((strength) => (
-                      <li key={strength} className="flex gap-2 text-[12.5px] text-foreground/85">
+                      <li key={strength} className="flex gap-2 text-[13px] text-foreground/85">
                         <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
                         {strength}
                       </li>
@@ -1802,11 +1800,7 @@ export function TestResultsView({
         note={fixList.length ? "Ordered by use cases affected" : undefined}
         action={
           fixList.length > 0 && (
-            <button
-              type="button"
-              disabled={chosen === 0}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#C72B65] px-3 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-[#A92355] disabled:cursor-not-allowed disabled:bg-[#C72B65]/45"
-            >
+            <button type="button" disabled={chosen === 0} className={btn.primary}>
               <Sparkles className="h-3.5 w-3.5" />
               Enhance prompt with {chosen === fixList.length ? "these" : chosen}{" "}
               {chosen === 1 ? "fix" : "fixes"}
@@ -1815,7 +1809,7 @@ export function TestResultsView({
         }
       >
         {fixList.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-4 shadow-sm">
+          <div className={cn(panel, "flex items-center gap-3 p-5")}>
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             <p className="text-[13px] text-foreground">
               Nothing to fix. Every use case met the pass mark of {PASS_MARK}.
@@ -1829,7 +1823,7 @@ export function TestResultsView({
                 <label
                   key={fix.id}
                   className={cn(
-                    "flex cursor-pointer gap-3 rounded-xl border bg-card p-3.5 shadow-sm transition",
+                    "flex cursor-pointer gap-3 rounded-xl border bg-card p-4 transition-colors",
                     included ? "border-border" : "border-dashed border-border opacity-60",
                   )}
                 >
@@ -1849,12 +1843,10 @@ export function TestResultsView({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13.5px] font-semibold text-foreground">
-                        {fix.title}
-                      </span>
+                      <span className="text-[14px] font-semibold text-foreground">{fix.title}</span>
                       <span
                         className={cn(
-                          "rounded border px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wider",
+                          "rounded border px-1.5 py-px text-[11px] font-bold uppercase tracking-wider",
                           fix.severity === "high"
                             ? "border-red-200 bg-red-50 text-red-600"
                             : "border-amber-200 bg-amber-50 text-amber-700",
@@ -1863,13 +1855,11 @@ export function TestResultsView({
                         {fix.severity === "high" ? "High" : "Med"}
                       </span>
                     </div>
-                    <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
-                      <span className="font-mono text-[11.5px] text-foreground/80">
-                        {fix.agent}
-                      </span>{" "}
+                    <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                      <span className="font-mono text-[12px] text-foreground/80">{fix.agent}</span>{" "}
                       · {fix.category} — {fix.description}
                     </p>
-                    <p className="mt-1.5 text-[11.5px] font-medium text-foreground/70">
+                    <p className="mt-1.5 text-[12px] font-medium text-foreground/70">
                       Resolves {issues} {issues === 1 ? "issue" : "issues"} · {affected.length} use{" "}
                       {affected.length === 1 ? "case" : "cases"}
                     </p>
@@ -1899,6 +1889,6 @@ export function TestResultsView({
           </div>
         )}
       </ResultsSection>
-    </div>
+    </ViewShell>
   );
 }
